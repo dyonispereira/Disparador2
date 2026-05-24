@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disparador WhatsApp PRO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+    <!-- Navbar -->
+    <nav class="bg-indigo-600 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold"><i class="fa-brands fa-whatsapp mr-2"></i> Disparador PRO</h1>
+            <div class="flex items-center space-x-4">
+                <span id="status-badge" class="px-3 py-1 rounded-full text-sm font-semibold bg-gray-400">Verificando...</span>
+                <button onclick="conectarWhatsApp()" class="bg-white text-indigo-600 px-4 py-2 rounded shadow hover:bg-indigo-50 transition font-medium">
+                    <i class="fa-solid fa-qrcode mr-1"></i> Conectar
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <!-- Coluna Esquerda: Ações -->
+        <div class="space-y-6">
+            
+            <!-- Box: Modal QR Code -->
+            <div id="qr-container" class="bg-white p-6 rounded-lg shadow-sm border border-slate-200 hidden text-center">
+                <h2 class="text-lg font-bold mb-2">Escaneie o QR Code</h2>
+                <p class="text-sm text-slate-500 mb-4">Abra o WhatsApp e aponte a câmera</p>
+                <img id="qr-image" src="" alt="QR Code" class="mx-auto border p-2 rounded-lg max-w-[200px]">
+            </div>
+
+            <!-- Box: Upload Leads -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-solid fa-file-csv text-emerald-500 mr-2"></i>Importar Leads</h2>
+                <form id="upload-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Arquivo CSV</label>
+                        <input type="file" id="csv-file" accept=".csv" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+                    </div>
+                    <button type="submit" class="w-full bg-emerald-600 text-white py-2 rounded shadow hover:bg-emerald-700 transition">Importar Planilha</button>
+
+                    <div class="relative flex py-2 items-center"><div class="flex-grow border-t border-slate-300"></div><span class="flex-shrink-0 mx-4 text-slate-400 text-xs">OU</span><div class="flex-grow border-t border-slate-300"></div></div>
+                    <button type="button" onclick="carregarArquivoLocal()" class="w-full bg-slate-700 text-white py-2 rounded shadow hover:bg-slate-800 transition text-sm"><i class="fa-solid fa-folder-open mr-2"></i>Ler direto da pasta /dados</button>
+                </form>
+            </div>
+
+            <!-- Box: Disparo -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-solid fa-paper-plane text-blue-500 mr-2"></i>Nova Campanha</h2>
+                <form id="send-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Mensagem</label>
+                        <p class="text-xs text-slate-500 mb-2">Use <b>{name}</b> para citar o nome do lead.</p>
+                        <textarea id="msg-text" rows="4" class="w-full border border-slate-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Fala {name}, tudo certo? 👋"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Imagem / Arquivo (Opcional)</label>
+                        <input type="file" id="media-file" accept="image/*, .pdf, .mp4" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-700 transition font-bold text-lg flex justify-center items-center">
+                        <i class="fa-solid fa-rocket mr-2"></i> Iniciar Disparo
+                    </button>
+                </form>
+            </div>
+
+        </div>
+
+        <!-- Coluna Direita: Tabela -->
+        <div class="md:col-span-2">
+            <div class="bg-white rounded-lg shadow-sm border border-slate-200 h-full flex flex-col">
+                <div class="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
+                    <h2 class="text-lg font-bold"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>Lista de Leads</h2>
+                    <div class="space-x-3">
+                        <button onclick="limparLeads()" class="text-red-400 hover:text-red-600 transition" title="Limpar Toda a Lista">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                        <button onclick="carregarLeads()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="flex-1 p-0 overflow-x-auto">
+                    <table class="w-full text-left text-sm text-slate-600">
+                        <thead class="bg-slate-100 text-slate-700 uppercase">
+                            <tr>
+                                <th class="px-6 py-3 font-semibold">ID</th>
+                                <th class="px-6 py-3 font-semibold">Nome</th>
+                                <th class="px-6 py-3 font-semibold">Telefone</th>
+                                <th class="px-6 py-3 font-semibold">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leads-body" class="divide-y divide-slate-200">
+                            <!-- Leads serão injetados aqui -->
+                            <tr>
+                                <td colspan="4" class="px-6 py-4 text-center text-slate-400">Carregando leads...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Lógica de Integração -->
+    <script>
+        const API_BASE = "http://127.0.0.1:8000";
+
+        // Formatar Status com cores
+        function getStatusBadge(status) {
+            if (status.toLowerCase() === 'enviado') {
+                return `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Enviado</span>`;
+            } else if (status.toLowerCase() === 'falhou') {
+                return `<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">Falhou</span>`;
+            }
+            return `<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-xs font-bold">Pendente</span>`;
+        }
+
+        // ==========================================
+        // 1. WHATSAPP CONEXÃO
+        // ==========================================
+        async function checarStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/whatsapp/status`);
+                const data = await res.json();
+                const badge = document.getElementById('status-badge');
+                
+                // Ajuste de acordo com o retorno da sua Evolution API
+                if (data && data.instance && data.instance.state === "open") {
+                    badge.className = "px-3 py-1 rounded-full text-sm font-semibold bg-green-500 text-white shadow";
+                    badge.innerHTML = '<i class="fa-solid fa-check-circle mr-1"></i> Conectado';
+                    document.getElementById('qr-container').classList.add('hidden');
+                } else {
+                    badge.className = "px-3 py-1 rounded-full text-sm font-semibold bg-red-500 text-white shadow";
+                    badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> Desconectado';
+                }
+            } catch (error) {
+                console.error("Erro ao checar status:", error);
+            }
+        }
+
+        async function conectarWhatsApp() {
+            try {
+                alert("Solicitando QR Code... Aguarde alguns segundos.");
+                const res = await fetch(`${API_BASE}/whatsapp/connect`);
+                const data = await res.json();
+                
+                if (data.base64) {
+                    document.getElementById('qr-image').src = data.base64;
+                    document.getElementById('qr-container').classList.remove('hidden');
+                } else if (data.instance && data.instance.state === "open") {
+                    alert("O WhatsApp já está conectado!");
+                    checarStatus();
+                } else {
+                    alert("Não foi possível carregar o QR Code. O servidor da Evolution está rodando?");
+                }
+            } catch (error) {
+                alert("Erro ao conectar na API.");
+            }
+        }
+
+        // ==========================================
+        // 2. LEADS
+        // ==========================================
+        async function carregarLeads() {
+            try {
+                const res = await fetch(`${API_BASE}/leads`);
+                const leads = await res.json();
+                const tbody = document.getElementById('leads-body');
+                
+                if (leads.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Nenhum lead encontrado.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                leads.forEach(lead => {
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="px-6 py-4 border-b border-slate-100">${lead.id}</td>
+                            <td class="px-6 py-4 border-b border-slate-100 font-medium">${lead.name || '-'}</td>
+                            <td class="px-6 py-4 border-b border-slate-100">${lead.phone}</td>
+                            <td class="px-6 py-4 border-b border-slate-100">${getStatusBadge(lead.status || 'pendente')}</td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                console.error("Erro ao carregar leads:", error);
+            }
+        }
+
+        async function limparLeads() {
+            if (!confirm("Tem certeza que deseja APAGAR TODOS os leads? Esta ação não pode ser desfeita.")) return;
+            
+            try {
+                const res = await fetch(`${API_BASE}/leads`, { method: "DELETE" });
+                if (res.ok) {
+                    alert("Todos os leads foram apagados da base de dados!");
+                    carregarLeads(); // Atualiza a tabela para mostrar vazio
+                } else {
+                    alert("Erro ao limpar banco de dados.");
+                }
+            } catch (error) {
+                alert("Erro de conexão ao tentar limpar.");
+            }
+        }
+
+        // UPLOAD CSV
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('csv-file');
+            if (!fileInput.files.length) return alert("Selecione um arquivo CSV!");
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            try {
+                const res = await fetch(`${API_BASE}/upload-leads-file`, {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    alert(`${data.created} leads importados com sucesso!`);
+                    carregarLeads(); // Atualiza a tabela
+                    fileInput.value = ""; // limpa o input
+                } else {
+                    alert(`Falha ao importar: ${data.detail || 'Verifique o formato do arquivo.'}`);
+                }
+            } catch (error) {
+                alert("Erro ao fazer upload do CSV.");
+            }
+        });
+
+    // CARREGAR DO ARQUIVO LOCAL DIRETO
+    async function carregarArquivoLocal() {
+        try {
+            const res = await fetch(`${API_BASE}/import-local-leads`, { method: "POST" });
+            const data = await res.json();
+            
+            if (res.ok) {
+                alert(`${data.created} leads importados com sucesso do arquivo local!`);
+                carregarLeads(); // Atualiza a tabela
+            } else {
+                alert(`Falha ao importar: ${data.detail}`);
+            }
+        } catch (error) {
+            alert("Erro ao conectar com a API para ler o arquivo local.");
+        }
+    }
+
+        // ==========================================
+        // 3. DISPARAR
+        // ==========================================
+        document.getElementById('send-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const msg = document.getElementById('msg-text').value;
+            const fileInput = document.getElementById('media-file');
+            
+            if (!msg) return alert("A mensagem não pode estar vazia!");
+
+            const formData = new FormData();
+            formData.append("message_text", msg);
+            if (fileInput.files.length > 0) {
+                formData.append("file", fileInput.files[0]);
+            }
+
+            try {
+                const btn = e.target.querySelector('button');
+                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Enviando...`;
+                
+                const res = await fetch(`${API_BASE}/send`, { method: "POST", body: formData });
+                const data = await res.json();
+                
+                alert(`Disparo finalizado! Enviados: ${data.enviados} de ${data.total}`);
+                carregarLeads(); // Atualiza os status na tabela
+                
+                btn.innerHTML = `<i class="fa-solid fa-rocket mr-2"></i> Iniciar Disparo`;
+            } catch (error) {
+                alert("Erro ao realizar os disparos.");
+            }
+        });
+
+        // INIT
+        checarStatus();
+        carregarLeads();
+    </script>
+</body>
+</html>
