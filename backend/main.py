@@ -6,6 +6,8 @@ import csv
 import requests
 import base64
 import re
+import random
+import asyncio
 
 import models
 import schemas
@@ -86,6 +88,40 @@ def delete_all_leads(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao limpar banco: {str(e)}")
+
+# =========================
+# MESSAGE TEMPLATES (CRUD)
+# =========================
+@app.post("/message-templates", response_model=schemas.MessageTemplateResponse)
+def create_message_template(template: schemas.MessageTemplateCreate, db: Session = Depends(get_db)):
+    db_template = models.MessageTemplate(**template.dict())
+    db.add(db_template)
+    db.commit()
+    db.refresh(db_template)
+    return db_template
+
+@app.get("/message-templates", response_model=list[schemas.MessageTemplateResponse])
+def get_message_templates(db: Session = Depends(get_db)):
+    return db.query(models.MessageTemplate).all()
+
+@app.put("/message-templates/{template_id}", response_model=schemas.MessageTemplateResponse)
+def update_message_template(template_id: int, template: schemas.MessageTemplateUpdate, db: Session = Depends(get_db)):
+    db_template = db.query(models.MessageTemplate).filter(models.MessageTemplate.id == template_id).first()
+    if not db_template:
+        raise HTTPException(status_code=404, detail="Template não encontrado")
+    db_template.text = template.text
+    db.commit()
+    db.refresh(db_template)
+    return db_template
+
+@app.delete("/message-templates/{template_id}")
+def delete_message_template(template_id: int, db: Session = Depends(get_db)):
+    db_template = db.query(models.MessageTemplate).filter(models.MessageTemplate.id == template_id).first()
+    if not db_template:
+        raise HTTPException(status_code=404, detail="Template não encontrado")
+    db.delete(db_template)
+    db.commit()
+    return {"ok": True, "message": "Template deletado com sucesso"}
 
 # =========================
 # UPLOAD CSV
@@ -278,12 +314,15 @@ def get_messages(db: Session = Depends(get_db)):
 # =========================
 @app.post("/send")
 async def send(
-    message_text: str = Form("Fala {name}, tudo certo? 👋"),
     file: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
 
     try:
+        templates = db.query(models.MessageTemplate).all()
+        if not templates:
+            raise HTTPException(status_code=400, detail="Nenhuma mensagem cadastrada para o disparo.")
+
         # Seleciona apenas os leads que ainda não receberam a mensagem
         leads = db.query(models.Lead).filter(models.Lead.status != "enviado").all()
 
@@ -307,44 +346,63 @@ async def send(
 
         enviados = 0
         total = len(leads)
+        headers = {"apikey": API_KEY, "Content-Type": "application/json"}
 
-        for lead in leads:
+        for i, lead in enumerate(leads):
             
-            # Substitui a tag {name} pelo nome real do lead na mensagem
-            text = message_text.replace("{name}", lead.name)
+            # 1. Sorteia uma mensagem aleatória
+            chosen_template = random.choice(templates)
+            text = chosen_template.text.replace("{name}", lead.name)
+            
+            final_status_code = 500  # Assume falha por padrão
 
+            # 2. Lógica de envio com ordem e delays aleatórios
             if b64_media:
-                payload = {
-                    "number": f"{lead.phone}",
-                    "mediatype": "image" if file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')) else "document", # Mais robusto para verificar tipo de imagem
-                    "mimetype": mimetype,
-                    "caption": text,
-                    "media": b64_media
-                }
-                url = f"{EVOLUTION_URL}/message/sendMedia/{INSTANCE}"
-            else:
-                payload = {
-                    "number": f"{lead.phone}",
-                    "text": text
-                }
-                url = f"{EVOLUTION_URL}/message/sendText/{INSTANCE}"
+                order = random.choice(['media_first', 'text_first'])
+                delay_between_parts = random.uniform(2, 8)
 
-            headers = {
-                "apikey": API_KEY,
-                "Content-Type": "application/json"
-            }
+                if order == 'media_first':
+                    payload_media = {"number": f"{lead.phone}", "mediatype": "image" if file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')) else "document", "mimetype": mimetype, "caption": text, "media": b64_media}
+                    url_media = f"{EVOLUTION_URL}/message/sendMedia/{INSTANCE}"
+                    r = requests.post(url_media, json=payload_media, headers=headers, timeout=30)
+                    final_status_code = r.status_code
+                    print(f"EVOLUTION (Media First) to {lead.phone}:", r.status_code, r.text)
+                else:  # text_first
+                    payload_text = {"number": f"{lead.phone}", "text": text}
+                    url_text = f"{EVOLUTION_URL}/message/sendText/{INSTANCE}"
+                    r_text = requests.post(url_text, json=payload_text, headers=headers, timeout=15)
+                    print(f"EVOLUTION (Text First - Part 1) to {lead.phone}:", r_text.status_code, r_text.text)
+                    
+                    await asyncio.sleep(delay_between_parts)
 
-            r = requests.post(url, json=payload, headers=headers, timeout=15)
+                    payload_media = {"number": f"{lead.phone}", "mediatype": "image" if file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')) else "document", "mimetype": mimetype, "media": b64_media}
+                    url_media = f"{EVOLUTION_URL}/message/sendMedia/{INSTANCE}"
+                    r_media = requests.post(url_media, json=payload_media, headers=headers, timeout=30)
+                    print(f"EVOLUTION (Text First - Part 2) to {lead.phone}:", r_media.status_code, r_media.text)
+                    
+                    final_status_code = r_media.status_code if r_text.ok else r_text.status_code
 
-            print("EVOLUTION RESPONSE:", r.status_code, r.text)
+            else:  # Apenas texto
+                payload_text = {"number": f"{lead.phone}", "text": text}
+                url_text = f"{EVOLUTION_URL}/message/sendText/{INSTANCE}"
+                r = requests.post(url_text, json=payload_text, headers=headers, timeout=15)
+                final_status_code = r.status_code
+                print(f"EVOLUTION (Text Only) to {lead.phone}:", r.status_code, r.text)
 
-            if r.status_code in [200, 201]:
+            # 3. Atualiza o status no banco
+            if 200 <= final_status_code < 300:
                 lead.status = "enviado"
                 enviados += 1
             else:
                 lead.status = "falhou"
+            
+            db.commit() # Salva o status de cada lead imediatamente
 
-        db.commit()
+            # 4. Delay entre leads (não aplica no último)
+            if i < len(leads) - 1:
+                delay_between_leads = random.uniform(20, 90)
+                print(f"--- Aguardando {delay_between_leads:.2f}s para o próximo lead ---")
+                await asyncio.sleep(delay_between_leads)
 
         # ==========================================
         # ATUALIZA A PLANILHA LOCAL APÓS O DISPARO

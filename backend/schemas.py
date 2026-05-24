@@ -37,3 +37,22 @@ class MessageResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# =========================
+# MESSAGE TEMPLATE
+# =========================
+class MessageTemplateBase(BaseModel):
+    text: str
+
+class MessageTemplateCreate(MessageTemplateBase):
+    pass
+
+class MessageTemplateUpdate(MessageTemplateBase):
+    pass
+
+class MessageTemplateResponse(MessageTemplateBase):
+    id: int
+
+    class Config:
+        from_attributes = True

@@ -27,3 +27,10 @@ class Message(Base):
     lead_id = Column(Integer, ForeignKey("leads.id"))
 
     lead = relationship("Lead", back_populates="messages")
+
+
+class MessageTemplate(Base):
+    __tablename__ = "message_templates"
+
+    id = Column(Integer, primary_key=True)
+    text = Column(String, nullable=False)
