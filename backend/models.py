@@ -55,6 +55,7 @@ class ConversationState(Base):
     meet_link = Column(String, nullable=True)
     calendar_event_id = Column(String, nullable=True)
     messages_json = Column(String, nullable=True)   # JSON array [{role, content}]
+    followup_sent = Column(Boolean, default=False, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 

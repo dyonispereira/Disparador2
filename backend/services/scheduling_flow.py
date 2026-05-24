@@ -88,6 +88,11 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
         db.commit()
         db.refresh(conv)
 
+    # Lead voltou a interagir — zera o follow-up para poder reenviar no futuro
+    if conv.followup_sent:
+        conv.followup_sent = False
+        db.commit()
+
     # Rota para o fluxo AI se a chave Gemini estiver configurada
     if settings.get("gemini_api_key", "").strip():
         return _handle_with_ai(conv, lead, raw_text, db, settings,

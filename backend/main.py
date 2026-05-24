@@ -26,6 +26,7 @@ def _run_migrations():
     with engine.connect() as conn:
         for sql in [
             "ALTER TABLE conversation_states ADD COLUMN IF NOT EXISTS messages_json TEXT",
+            "ALTER TABLE conversation_states ADD COLUMN IF NOT EXISTS followup_sent BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE scheduled_meetings ADD COLUMN IF NOT EXISTS reminder_24h_sent BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE scheduled_meetings ADD COLUMN IF NOT EXISTS reminder_1h_sent  BOOLEAN NOT NULL DEFAULT FALSE",
         ]:
@@ -40,19 +41,37 @@ _run_migrations()
 
 async def _reminder_loop():
     from config import load_settings
-    from services.reminder import check_and_send
+    from services.reminder import check_and_send as reminders_check
+    from services.followup import check_and_send as followup_check
+
+    iteration = 0
     while True:
-        await asyncio.sleep(300)  # every 5 minutes
+        await asyncio.sleep(300)  # a cada 5 minutos
+        iteration += 1
+        settings = load_settings()
+
+        # Lembretes de reunião — roda toda iteração (5 min)
         try:
             db = SessionLocal()
-            settings = load_settings()
-            sent = check_and_send(db, settings)
+            sent = reminders_check(db, settings)
             if sent:
-                print(f"[reminders] {sent} reminder(s) sent")
+                print(f"[reminders] {sent} lembrete(s) enviado(s)")
         except Exception as exc:
             print(f"[reminders] error: {exc}")
         finally:
             db.close()
+
+        # Follow-up de leads sumidos — roda a cada 6 iterações (30 min)
+        if iteration % 6 == 0:
+            try:
+                db = SessionLocal()
+                sent = followup_check(db, settings)
+                if sent:
+                    print(f"[followup] {sent} follow-up(s) enviado(s)")
+            except Exception as exc:
+                print(f"[followup] error: {exc}")
+            finally:
+                db.close()
 
 
 app = FastAPI()
