@@ -61,7 +61,13 @@ def get_service():
     return build("calendar", "v3", credentials=creds)
 
 
-def create_meet_event(summary: str, date_str: str, time_str: str, attendee_emails: list[str] | None = None) -> dict:
+def create_meet_event(
+    summary: str,
+    date_str: str,
+    time_str: str,
+    attendee_emails: list[str] | None = None,
+    calendar_id: str = "primary",
+) -> dict:
     """
     Creates a Google Calendar event with a Google Meet link.
 
@@ -69,7 +75,9 @@ def create_meet_event(summary: str, date_str: str, time_str: str, attendee_email
         summary:         Event title (e.g. "Reunião Empresa × João")
         date_str:        Date in YYYY-MM-DD format
         time_str:        Start time in HH:MM format (Brasília / America/Sao_Paulo)
-        attendee_emails: Optional list of email addresses to invite
+        attendee_emails: Optional list of individual email addresses to invite
+        calendar_id:     Target calendar ID (default "primary"). Pass the shared
+                         calendar ID to create the event directly in it.
 
     Returns:
         {"event_id": str, "meet_link": str | None, "html_link": str}
@@ -93,7 +101,7 @@ def create_meet_event(summary: str, date_str: str, time_str: str, attendee_email
     }
 
     created = service.events().insert(
-        calendarId="primary",
+        calendarId=calendar_id,
         body=event,
         conferenceDataVersion=1,
         sendUpdates="all" if attendee_emails else "none",

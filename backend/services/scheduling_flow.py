@@ -187,10 +187,8 @@ def _create_meet_and_confirm(conv, lead, db, settings):
     ativos = db.query(Participante).filter(Participante.ativo == True).all()
     emails = [p.email for p in ativos]
 
-    # Agenda da empresa — sempre convidada se configurada
-    company_cal = settings.get("company_calendar_email", "").strip()
-    if company_cal and company_cal not in emails:
-        emails.append(company_cal)
+    # ID do calendário compartilhado da empresa (cria o evento diretamente nele)
+    calendar_id = settings.get("company_calendar_email", "").strip() or "primary"
 
     meet_link = None
     event_id = None
@@ -200,6 +198,7 @@ def _create_meet_and_confirm(conv, lead, db, settings):
             date_str=conv.selected_date,
             time_str=conv.selected_time,
             attendee_emails=emails,
+            calendar_id=calendar_id,
         )
         meet_link = result.get("meet_link")
         event_id = result.get("event_id")
