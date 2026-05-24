@@ -79,7 +79,6 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict) -> b
     if not lead:
         return False   # Unknown sender → ignore
 
-    # ConversationState is keyed by the canonical phone (as stored in Lead)
     canonical = lead.phone
     conv = db.query(ConversationState).filter(ConversationState.phone == canonical).first()
     if not conv:
@@ -88,22 +87,116 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict) -> b
         db.commit()
         db.refresh(conv)
 
-    text = raw_text.strip().lower()
+    # Route to AI flow if Gemini API key is configured
+    if settings.get("gemini_api_key", "").strip():
+        return _handle_with_ai(conv, lead, raw_text, db, settings)
 
+    # Fallback: number-based flow
+    text = raw_text.strip().lower()
     if conv.state in ("idle", "confirmed", "cancelled"):
         _start_flow(conv, lead, db, settings)
         return True
-
     if conv.state == "awaiting_date":
         return _on_date_pick(conv, lead, text, db, settings)
-
     if conv.state == "awaiting_time":
         return _on_time_pick(conv, lead, text, db, settings)
-
     if conv.state == "awaiting_confirmation":
         return _on_confirm(conv, lead, text, db, settings)
-
     return False
+
+
+# ─── AI flow ──────────────────────────────────────────────────────────────────
+
+def _append_history(conv, user_msg: str, bot_msg: str, db):
+    try:
+        msgs = json.loads(conv.messages_json or "[]")
+    except Exception:
+        msgs = []
+    msgs.append({"role": "user",      "content": user_msg})
+    msgs.append({"role": "assistant", "content": bot_msg})
+    conv.messages_json = json.dumps(msgs[-20:])  # keep last 20
+    conv.updated_at = datetime.utcnow()
+    db.commit()
+
+
+def _handle_with_ai(conv, lead, raw_text: str, db, settings) -> bool:
+    from services.ai_flow import ask_gemini
+
+    result = ask_gemini(conv, lead, raw_text, settings)
+
+    if not result:
+        # Gemini unavailable — fall back to number-based flow
+        text = raw_text.strip().lower()
+        if conv.state in ("idle", "confirmed", "cancelled"):
+            _start_flow(conv, lead, db, settings)
+        elif conv.state == "awaiting_date":
+            _on_date_pick(conv, lead, text, db, settings)
+        elif conv.state == "awaiting_time":
+            _on_time_pick(conv, lead, text, db, settings)
+        elif conv.state == "awaiting_confirmation":
+            _on_confirm(conv, lead, text, db, settings)
+        return True
+
+    action  = result.get("action", "clarify")
+    value   = result.get("value")
+    message = result.get("message", "")
+
+    _append_history(conv, raw_text, message, db)
+
+    # For time_selected and confirmed the system sends its own messages after
+    if message and action not in ("time_selected", "confirmed"):
+        _send(lead.phone, message, settings)
+
+    if action == "start_flow":
+        days = _next_business_days(5)
+        conv.offered_dates  = json.dumps([d.strftime("%Y-%m-%d") for d in days])
+        conv.offered_times  = json.dumps(settings.get("available_times", ["09:00","10:00","11:00","14:00","15:00","16:00","17:00"]))
+        conv.state          = "awaiting_date"
+        conv.updated_at     = datetime.utcnow()
+        db.commit()
+
+    elif action == "date_selected" and value is not None:
+        dates = json.loads(conv.offered_dates or "[]")
+        try:
+            idx = int(value)
+            if 0 <= idx < len(dates):
+                conv.selected_date = dates[idx]
+                conv.offered_times = json.dumps(settings.get("available_times", ["09:00","10:00","11:00","14:00","15:00","16:00","17:00"]))
+                conv.state         = "awaiting_time"
+                conv.updated_at    = datetime.utcnow()
+                db.commit()
+        except (ValueError, TypeError):
+            pass
+
+    elif action == "time_selected" and value is not None:
+        times = json.loads(conv.offered_times or "[]")
+        try:
+            idx = int(value)
+            if 0 <= idx < len(times):
+                conv.selected_time = times[idx]
+                conv.updated_at    = datetime.utcnow()
+                db.commit()
+                _create_meet_and_confirm(conv, lead, db, settings)
+            else:
+                _send(lead.phone, message, settings)
+        except (ValueError, TypeError):
+            _send(lead.phone, message, settings)
+
+    elif action == "confirmed":
+        _finalize(conv, lead, db, settings)
+
+    elif action == "cancelled":
+        conv.state          = "idle"
+        conv.selected_date  = None
+        conv.selected_time  = None
+        conv.meet_link      = None
+        conv.calendar_event_id = None
+        conv.updated_at     = datetime.utcnow()
+        db.commit()
+
+    # clarify / none → AI message already sent above
+
+    return True
 
 
 # ─── Flow steps ───────────────────────────────────────────────────────────────

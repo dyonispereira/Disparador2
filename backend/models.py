@@ -54,6 +54,7 @@ class ConversationState(Base):
     offered_times = Column(String, nullable=True)       # JSON list of HH:MM strings
     meet_link = Column(String, nullable=True)
     calendar_event_id = Column(String, nullable=True)
+    messages_json = Column(String, nullable=True)   # JSON array [{role, content}]
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -72,6 +73,8 @@ class ScheduledMeeting(Base):
     status = Column(String, default="pendente")
     created_at = Column(DateTime, default=datetime.utcnow)
     confirmed_at = Column(DateTime, nullable=True)
+    reminder_24h_sent = Column(Boolean, default=False, nullable=False)
+    reminder_1h_sent  = Column(Boolean, default=False, nullable=False)
 
 
 class Participante(Base):

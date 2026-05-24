@@ -19,7 +19,49 @@ from db import SessionLocal, engine
 # =========================
 models.Base.metadata.create_all(bind=engine)
 
+
+def _run_migrations():
+    """Add columns introduced after the initial schema creation."""
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for sql in [
+            "ALTER TABLE conversation_states ADD COLUMN IF NOT EXISTS messages_json TEXT",
+            "ALTER TABLE scheduled_meetings ADD COLUMN IF NOT EXISTS reminder_24h_sent BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE scheduled_meetings ADD COLUMN IF NOT EXISTS reminder_1h_sent  BOOLEAN NOT NULL DEFAULT FALSE",
+        ]:
+            try:
+                conn.execute(text(sql))
+            except Exception:
+                pass
+        conn.commit()
+
+
+_run_migrations()
+
+async def _reminder_loop():
+    from config import load_settings
+    from services.reminder import check_and_send
+    while True:
+        await asyncio.sleep(300)  # every 5 minutes
+        try:
+            db = SessionLocal()
+            settings = load_settings()
+            sent = check_and_send(db, settings)
+            if sent:
+                print(f"[reminders] {sent} reminder(s) sent")
+        except Exception as exc:
+            print(f"[reminders] error: {exc}")
+        finally:
+            db.close()
+
+
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(_reminder_loop())
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -377,7 +419,8 @@ async def send(
             
             # 1. Sorteia uma mensagem aleatória
             chosen_template = random.choice(templates)
-            text = chosen_template.text.replace("{name}", lead.name or "")
+            # Substituição robusta do nome, que remove a tag se o nome for vazio e ignora variações como { name }
+            text = re.sub(r'{\s*name\s*}', lead.name or "", chosen_template.text, flags=re.IGNORECASE)
             
             final_status_code = 500  # Assume falha por padrão
 

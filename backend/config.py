@@ -13,6 +13,7 @@ DEFAULT_SETTINGS = {
     "company_name": "Nossa Empresa",
     "seller_name": "Equipe de Vendas",
     "company_calendar_email": "",
+    "gemini_api_key": "",
 }
 
 
