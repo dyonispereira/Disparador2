@@ -67,7 +67,8 @@ def _send(phone: str, text: str, s: dict) -> bool:
 
 # ─── Public entry-point ───────────────────────────────────────────────────────
 
-def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict) -> bool:
+def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
+                    audio_data: str = None, audio_mime: str = None) -> bool:
     """
     Called for every incoming WhatsApp message.
     Returns True if the message was consumed by the scheduling flow.
@@ -77,7 +78,7 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict) -> b
     variants = _phone_variants(phone)
     lead = db.query(Lead).filter(Lead.phone.in_(variants)).first()
     if not lead:
-        return False   # Unknown sender → ignore
+        return False   # Remetente desconhecido → ignora
 
     canonical = lead.phone
     conv = db.query(ConversationState).filter(ConversationState.phone == canonical).first()
@@ -87,11 +88,16 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict) -> b
         db.commit()
         db.refresh(conv)
 
-    # Route to AI flow if Gemini API key is configured
+    # Rota para o fluxo AI se a chave Gemini estiver configurada
     if settings.get("gemini_api_key", "").strip():
-        return _handle_with_ai(conv, lead, raw_text, db, settings)
+        return _handle_with_ai(conv, lead, raw_text, db, settings,
+                               audio_data=audio_data, audio_mime=audio_mime)
 
-    # Fallback: number-based flow
+    # Fallback: fluxo numérico (sem áudio)
+    if audio_data and not raw_text.strip():
+        _send(lead.phone, "Recebi seu áudio! 😊 Por favor, responda com texto para eu conseguir agendar.", settings)
+        return True
+
     text = raw_text.strip().lower()
     if conv.state in ("idle", "confirmed", "cancelled"):
         _start_flow(conv, lead, db, settings)
@@ -119,10 +125,12 @@ def _append_history(conv, user_msg: str, bot_msg: str, db):
     db.commit()
 
 
-def _handle_with_ai(conv, lead, raw_text: str, db, settings) -> bool:
+def _handle_with_ai(conv, lead, raw_text: str, db, settings,
+                    audio_data: str = None, audio_mime: str = None) -> bool:
     from services.ai_flow import ask_gemini
 
-    result = ask_gemini(conv, lead, raw_text, settings)
+    result = ask_gemini(conv, lead, raw_text, settings,
+                        audio_data=audio_data, audio_mime=audio_mime)
 
     if not result:
         # Gemini unavailable — fall back to number-based flow

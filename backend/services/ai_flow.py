@@ -52,7 +52,8 @@ def _resolve_index(value, options: list):
     return None
 
 
-def ask_gemini(conv, lead, user_message: str, settings: dict):
+def ask_gemini(conv, lead, user_message: str, settings: dict,
+               audio_data: str = None, audio_mime: str = None):
     """
     Calls Gemini Flash and returns structured response.
 
@@ -127,6 +128,22 @@ RESPONDA SOMENTE com JSON válido (sem texto fora). Exemplos corretos:
     except Exception:
         pass
 
+    # Monta o conteúdo: áudio + instrução ou só texto
+    if audio_data:
+        import base64 as _b64
+        try:
+            audio_bytes = _b64.b64decode(audio_data)
+            content = [
+                {"inline_data": {"mime_type": audio_mime or "audio/ogg", "data": audio_bytes}},
+                "Transcreva o áudio acima e use o conteúdo como mensagem do lead para o sistema de agendamento.",
+            ]
+            print(f"[AI] audio mode mime={audio_mime} bytes={len(audio_bytes)}")
+        except Exception as e:
+            print(f"[AI] audio decode error: {e}")
+            content = user_message or "oi"
+    else:
+        content = user_message or "oi"
+
     for model_name in ("gemini-2.5-flash", "gemini-2.0-flash"):
         try:
             model = genai.GenerativeModel(
@@ -134,7 +151,7 @@ RESPONDA SOMENTE com JSON válido (sem texto fora). Exemplos corretos:
                 system_instruction=system,
                 generation_config={"response_mime_type": "application/json", "temperature": 0.3},
             )
-            response = model.start_chat(history=history).send_message(user_message)
+            response = model.start_chat(history=history).send_message(content)
             result = json.loads(response.text)
             if "message" in result and "action" in result:
                 print(f"[AI] {model_name} -> action={result['action']} value={result.get('value')}")

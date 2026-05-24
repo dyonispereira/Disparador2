@@ -605,9 +605,37 @@ async def webhook_evolution(request: Request):
             or ""
         )
 
-        print(f"[webhook] phone={phone} text={repr(text)}")
+        # Detecta áudio (voz ou arquivo de áudio)
+        audio_data = None
+        audio_mime = None
+        is_audio = any(k in msg_obj for k in ("audioMessage", "pttMessage"))
+        if is_audio and not text.strip():
+            print(f"[webhook] audio detected from {phone}, fetching base64...")
+            try:
+                from config import load_settings as _ls
+                _s = _ls()
+                r = requests.post(
+                    f"{_s['evolution_url']}/chat/getBase64FromMediaMessage/{_s['instance']}",
+                    json={"message": data, "convertToMp4": False},
+                    headers={"apikey": _s["api_key"], "Content-Type": "application/json"},
+                    timeout=20,
+                )
+                if r.ok:
+                    resp = r.json()
+                    raw_b64 = resp.get("base64", "")
+                    if "," in raw_b64:
+                        raw_b64 = raw_b64.split(",", 1)[1]
+                    audio_data = raw_b64
+                    audio_mime = (resp.get("mimetype") or "audio/ogg").split(";")[0].strip()
+                    print(f"[webhook] audio fetched mime={audio_mime} size={len(audio_data)}")
+                else:
+                    print(f"[webhook] audio fetch failed: {r.status_code} {r.text[:200]}")
+            except Exception as e:
+                print(f"[webhook] audio fetch error: {e}")
 
-        if not text.strip():
+        print(f"[webhook] phone={phone} text={repr(text)} audio={bool(audio_data)}")
+
+        if not text.strip() and not audio_data:
             continue
 
         db = SessionLocal()
@@ -630,13 +658,14 @@ async def webhook_evolution(request: Request):
             if vendor_jid:
                 phone_display = phone[2:] if phone.startswith("55") else phone
                 data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+                msg_preview = text.strip() if text.strip() else ("🎤 [áudio]" if audio_data else "")
                 alert = (
                     f"\U0001f6a8 *ALERTA COMERCIAL*\n\n"
                     f"Time, atenção!\n\n"
                     f"O lead *{lead_name}* acabou de responder no WhatsApp.\n\n"
                     f"\U0001f4de Telefone: {phone_display}\n"
                     f"\U0001f552 Data/Hora: {data_hora}\n"
-                    f"\U0001f4ac Mensagem: \"{text.strip()}\"\n\n"
+                    f"\U0001f4ac Mensagem: \"{msg_preview}\"\n\n"
                     f"⚡ *URGENTE:* entrar em contato o quanto antes!"
                 )
                 try:
@@ -650,7 +679,8 @@ async def webhook_evolution(request: Request):
                 except Exception:
                     pass
 
-            handled = handle_incoming(phone=phone, raw_text=text, db=db, settings=settings)
+            handled = handle_incoming(phone=phone, raw_text=text, db=db, settings=settings,
+                                       audio_data=audio_data, audio_mime=audio_mime)
             print(f"[webhook] handled={handled} phone={phone}")
             results.append({"phone": phone, "handled": handled})
         except Exception as exc:
