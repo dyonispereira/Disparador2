@@ -87,10 +87,14 @@ def ask_gemini(conv, lead, user_message: str, settings: dict,
     dates_list = "\n".join([f"{i}. {_fmt_date(d)} ({d.strftime('%d/%m')})" for i, d in enumerate(days)])
     times_list = "\n".join([f"{i}. {t}h" for i, t in enumerate(times)])
 
-    system = f"""Você é um assistente comercial simpático da {company} no WhatsApp.
-Seu objetivo é agendar uma reunião rápida de apresentação com {first_name}.
+    persona = settings.get("bot_persona", "").strip()
+    persona_block = f"{persona}\n\n---\n\n" if persona else ""
 
-ESTADO ATUAL: {conv.state}
+    idx_15 = next((i for i, t in enumerate(times) if t == "15:00"), 4)
+
+    system = f"""{persona_block}LEAD: {first_name}
+EMPRESA: {company}
+ESTADO DA CONVERSA: {conv.state}
 DATA ESCOLHIDA: {conv.selected_date or "nenhuma"}
 HORÁRIO ESCOLHIDO: {conv.selected_time or "nenhum"}
 
@@ -100,24 +104,25 @@ DATAS DISPONÍVEIS (índices 0 a {len(days)-1}):
 HORÁRIOS DISPONÍVEIS (índices 0 a {len(times)-1}):
 {times_list}
 
-COMPORTAMENTO POR ESTADO:
-- idle / confirmed / cancelled -> apresente as datas disponíveis de forma amigável, action=start_flow
-- awaiting_date  -> identifique qual data o lead quer ("quarta", "dia 28", "opção 3"), action=date_selected
-- awaiting_time  -> identifique qual horário ("às 15h", "de tarde", "4", "manhã"), action=time_selected
+COMPORTAMENTO OBRIGATÓRIO POR ESTADO:
+- idle / confirmed / cancelled -> use a persona para engajar, provoque a dor, crie curiosidade e apresente as datas para agendar. action=start_flow
+- awaiting_date  -> identifique qual data o lead quer ("quarta", "dia 28", "opção 3", "próxima semana"). action=date_selected
+- awaiting_time  -> identifique qual horário ("às 15h", "de tarde", "4", "manhã"). action=time_selected
 - awaiting_confirmation -> identifique se confirma (action=confirmed) ou cancela (action=cancelled)
+- Se o lead tiver dúvidas, objeções ou perguntas -> responda usando a persona (curto, direto) e redirecione para o agendamento. action=clarify
 
-REGRAS OBRIGATÓRIAS PARA O CAMPO "value":
-- date_selected: SEMPRE retorne o NÚMERO DO ÍNDICE (inteiro 0 a {len(days)-1}). Ex: 3a data = value=2
-- time_selected: SEMPRE retorne o NÚMERO DO ÍNDICE (inteiro 0 a {len(times)-1}). Ex: 15:00h é índice {next((i for i,t in enumerate(times) if t=="15:00"), 4)} = value={next((i for i,t in enumerate(times) if t=="15:00"), 4)}
-- confirmed/cancelled/start_flow/clarify: value=null
+REGRAS DO CAMPO "value" (OBRIGATÓRIO):
+- date_selected: ÍNDICE INTEIRO (0 a {len(days)-1}). Ex: 3ª opção = value=2
+- time_selected: ÍNDICE INTEIRO (0 a {len(times)-1}). Ex: 15:00h = value={idx_15}
+- start_flow / confirmed / cancelled / clarify: value=null
 
-ESTILO: curto, natural, WhatsApp. Use *negrito* quando necessário. Máximo 4 linhas.
+FORMATO: mensagens curtas, WhatsApp, *negrito* quando necessário, máximo 4 linhas.
 
-RESPONDA SOMENTE com JSON válido (sem texto fora). Exemplos corretos:
-{{"message": "Qual data prefere?", "action": "start_flow", "value": null}}
-{{"message": "Ótimo!", "action": "date_selected", "value": 2}}
-{{"message": "Perfeito!", "action": "time_selected", "value": 4}}
-{{"message": "Confirmado!", "action": "confirmed", "value": null}}"""
+RESPONDA SOMENTE JSON válido. Exemplos:
+{{"message": "Boa! Qual data fica melhor pra você?", "action": "start_flow", "value": null}}
+{{"message": "Anotado!", "action": "date_selected", "value": 2}}
+{{"message": "Perfeito!", "action": "time_selected", "value": {idx_15}}}
+{{"message": "Reunião confirmada!", "action": "confirmed", "value": null}}"""
 
     # Histórico de conversa (últimas 8 mensagens)
     history = []

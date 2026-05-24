@@ -380,7 +380,7 @@
         <!-- IA Gemini -->
         <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
             <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-solid fa-robot text-purple-500 mr-2"></i>IA Conversacional (Gemini Flash)</h2>
-            <div class="mb-3">
+            <div class="mb-4">
                 <label class="block text-sm font-medium text-slate-700 mb-1">
                     <i class="fa-solid fa-key text-purple-400 mr-1"></i>
                     Chave da API Gemini
@@ -391,8 +391,21 @@
                     placeholder="AIzaSy...">
                 <p class="text-xs text-slate-500 mt-1">
                     <i class="fa-solid fa-circle-info mr-1"></i>
-                    Quando preenchida, o bot passa a entender linguagem natural ("quarta de tarde") em vez de exigir números.
-                    Deixe em branco para usar o fluxo numérico padrão.
+                    Quando preenchida, o bot entende linguagem natural e áudio. Deixe em branco para fluxo numérico.
+                </p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">
+                    <i class="fa-solid fa-id-card text-purple-400 mr-1"></i>
+                    Perfil do Bot (Persona)
+                    <span class="text-xs text-slate-400 ml-2">Quem é o bot, tom de voz, objeções, estratégia de conversa</span>
+                </label>
+                <textarea id="cfg-bot-persona" rows="14"
+                    class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono focus:ring-2 focus:ring-purple-400 outline-none"
+                    placeholder="Descreva a personalidade do bot, o produto, dores do cliente, objeções comuns e tom de comunicação..."></textarea>
+                <p class="text-xs text-slate-500 mt-1">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    Tudo que você escrever aqui é enviado ao Gemini como instrução antes de cada conversa. Quanto mais contexto, melhor o bot responde.
                 </p>
             </div>
         </div>
@@ -752,6 +765,7 @@
                 document.getElementById('cfg-vendor-group').value      = s.vendor_group_jid        || '';
                 document.getElementById('cfg-company-calendar').value = s.company_calendar_email || '';
                 document.getElementById('cfg-gemini-key').value       = s.gemini_api_key || '';
+                document.getElementById('cfg-bot-persona').value      = s.bot_persona    || '';
                 document.getElementById('cfg-times').value             = (s.available_times || []).join('\n');
             } catch (e) { console.error("Erro ao carregar configurações:", e); }
         }
@@ -770,6 +784,7 @@
                 vendor_group_jid:       document.getElementById('cfg-vendor-group').value.trim(),
                 company_calendar_email: document.getElementById('cfg-company-calendar').value.trim().toLowerCase(),
                 gemini_api_key:         document.getElementById('cfg-gemini-key').value.trim(),
+                bot_persona:            document.getElementById('cfg-bot-persona').value.trim(),
                 available_times:        times,
             };
 
