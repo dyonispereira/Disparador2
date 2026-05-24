@@ -155,35 +155,37 @@ def _handle_with_ai(conv, lead, raw_text: str, db, settings) -> bool:
         conv.updated_at     = datetime.utcnow()
         db.commit()
 
-    elif action == "date_selected" and value is not None:
+    elif action == "date_selected":
+        from services.ai_flow import _resolve_index
         dates = json.loads(conv.offered_dates or "[]")
-        try:
-            idx = int(value)
-            if 0 <= idx < len(dates):
-                conv.selected_date = dates[idx]
-                conv.offered_times = json.dumps(settings.get("available_times", ["09:00","10:00","11:00","14:00","15:00","16:00","17:00"]))
-                conv.state         = "awaiting_time"
-                conv.updated_at    = datetime.utcnow()
-                db.commit()
-        except (ValueError, TypeError):
-            pass
+        chosen = _resolve_index(value, dates)
+        if chosen:
+            conv.selected_date = chosen
+            conv.offered_times = json.dumps(settings.get("available_times", ["09:00","10:00","11:00","14:00","15:00","16:00","17:00"]))
+            conv.state         = "awaiting_time"
+            conv.updated_at    = datetime.utcnow()
+            db.commit()
 
-    elif action == "time_selected" and value is not None:
+    elif action == "time_selected":
+        from services.ai_flow import _resolve_index
         times = json.loads(conv.offered_times or "[]")
-        try:
-            idx = int(value)
-            if 0 <= idx < len(times):
-                conv.selected_time = times[idx]
-                conv.updated_at    = datetime.utcnow()
-                db.commit()
-                _create_meet_and_confirm(conv, lead, db, settings)
-            else:
-                _send(lead.phone, message, settings)
-        except (ValueError, TypeError):
-            _send(lead.phone, message, settings)
+        chosen = _resolve_index(value, times)
+        if chosen:
+            conv.selected_time = chosen
+            conv.updated_at    = datetime.utcnow()
+            db.commit()
+            _create_meet_and_confirm(conv, lead, db, settings)
+        else:
+            _send(lead.phone, message or "Não entendi o horário 😅 Qual dos horários acima prefere?", settings)
 
     elif action == "confirmed":
-        _finalize(conv, lead, db, settings)
+        if conv.selected_date and conv.selected_time:
+            _finalize(conv, lead, db, settings)
+        elif conv.selected_date:
+            # Horário nunca foi capturado — pede de novo
+            _ask_time(conv, lead, db, settings)
+        else:
+            _start_flow(conv, lead, db, settings)
 
     elif action == "cancelled":
         conv.state          = "idle"
@@ -308,7 +310,7 @@ def _create_meet_and_confirm(conv, lead, db, settings):
         "🗓️ *Tudo certo! Confirma a reunião abaixo?*",
         "",
         f"📅 *Data:* {date_label}",
-        f"⏰ *Horário:* {conv.selected_time}h",
+        f"⏰ *Horário:* {conv.selected_time or '?'}h",
     ]
     if meet_link:
         lines += ["🎥 *Link Meet:*", meet_link]
@@ -361,7 +363,7 @@ def _finalize(conv, lead, db, settings):
         "🎉 *Reunião confirmada!*",
         "",
         f"📅 *Data:* {date_label}",
-        f"⏰ *Horário:* {conv.selected_time}h",
+        f"⏰ *Horário:* {conv.selected_time or '?'}h",
         f"🎥 *Link Meet:* {meet_link}",
         "",
         "Até lá! Qualquer dúvida é só chamar. 😊",

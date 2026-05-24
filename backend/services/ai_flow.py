@@ -23,6 +23,35 @@ def _fmt_date(d) -> str:
     return f"{_WEEKDAYS_PT[d.weekday()]}, {d.day} de {_MONTHS_PT[d.month-1]}"
 
 
+def _resolve_index(value, options: list):
+    """
+    Aceita índice numérico (0, 1, 2...) ou string direta ("15:00", "16:00h").
+    Retorna o item da lista ou None se não encontrar.
+    """
+    if value is None:
+        return None
+
+    # Tenta como índice numérico
+    try:
+        idx = int(value)
+        if 0 <= idx < len(options):
+            return options[idx]
+    except (ValueError, TypeError):
+        pass
+
+    # Tenta como string direta (remove "h" e espaços extras)
+    val_clean = str(value).replace("h", "").strip()
+    if val_clean in options:
+        return val_clean
+
+    # Tenta encontrar correspondência parcial
+    for opt in options:
+        if opt in str(value) or str(value) in opt:
+            return opt
+
+    return None
+
+
 def ask_gemini(conv, lead, user_message: str, settings: dict):
     """
     Calls Gemini Flash and returns structured response.
@@ -30,12 +59,12 @@ def ask_gemini(conv, lead, user_message: str, settings: dict):
     Returns: {"message": str, "action": str, "value": any}  or  None on failure.
 
     Actions:
-        start_flow    → show available dates (value=null)
-        date_selected → lead picked a date  (value=0-based index)
-        time_selected → lead picked a time  (value=0-based index)
-        confirmed     → lead confirmed      (value="yes")
-        cancelled     → lead wants to quit  (value="no")
-        clarify       → couldn't understand (value=null)
+        start_flow    -> show available dates (value=null)
+        date_selected -> lead picked a date  (value=0-based index integer)
+        time_selected -> lead picked a time  (value=0-based index integer)
+        confirmed     -> lead confirmed      (value="yes")
+        cancelled     -> lead wants to quit  (value="no")
+        clarify       -> couldn't understand (value=null)
     """
     api_key = settings.get("gemini_api_key", "").strip()
     if not api_key:
@@ -71,17 +100,25 @@ HORÁRIOS DISPONÍVEIS (índices 0 a {len(times)-1}):
 {times_list}
 
 COMPORTAMENTO POR ESTADO:
-- idle / confirmed / cancelled → apresente as datas disponíveis de forma amigável
-- awaiting_date  → identifique qual data o lead quer ("quarta", "dia 28", "opção 3", etc.)
-- awaiting_time  → identifique qual horário ("às 15h", "de tarde", "4", "manhã", etc.)
-- awaiting_confirmation → identifique se confirma ou cancela
+- idle / confirmed / cancelled -> apresente as datas disponíveis de forma amigável, action=start_flow
+- awaiting_date  -> identifique qual data o lead quer ("quarta", "dia 28", "opção 3"), action=date_selected
+- awaiting_time  -> identifique qual horário ("às 15h", "de tarde", "4", "manhã"), action=time_selected
+- awaiting_confirmation -> identifique se confirma (action=confirmed) ou cancela (action=cancelled)
+
+REGRAS OBRIGATÓRIAS PARA O CAMPO "value":
+- date_selected: SEMPRE retorne o NÚMERO DO ÍNDICE (inteiro 0 a {len(days)-1}). Ex: 3a data = value=2
+- time_selected: SEMPRE retorne o NÚMERO DO ÍNDICE (inteiro 0 a {len(times)-1}). Ex: 15:00h é índice {next((i for i,t in enumerate(times) if t=="15:00"), 4)} = value={next((i for i,t in enumerate(times) if t=="15:00"), 4)}
+- confirmed/cancelled/start_flow/clarify: value=null
 
 ESTILO: curto, natural, WhatsApp. Use *negrito* quando necessário. Máximo 4 linhas.
 
-RESPONDA SOMENTE com JSON válido (sem texto fora):
-{{"message": "texto para o lead", "action": "start_flow|date_selected|time_selected|confirmed|cancelled|clarify", "value": null}}"""
+RESPONDA SOMENTE com JSON válido (sem texto fora). Exemplos corretos:
+{{"message": "Qual data prefere?", "action": "start_flow", "value": null}}
+{{"message": "Ótimo!", "action": "date_selected", "value": 2}}
+{{"message": "Perfeito!", "action": "time_selected", "value": 4}}
+{{"message": "Confirmado!", "action": "confirmed", "value": null}}"""
 
-    # Conversation history (last 8 messages for context)
+    # Histórico de conversa (últimas 8 mensagens)
     history = []
     try:
         for m in json.loads(conv.messages_json or "[]")[-8:]:
@@ -95,7 +132,7 @@ RESPONDA SOMENTE com JSON válido (sem texto fora):
             model = genai.GenerativeModel(
                 model_name,
                 system_instruction=system,
-                generation_config={"response_mime_type": "application/json", "temperature": 0.4},
+                generation_config={"response_mime_type": "application/json", "temperature": 0.3},
             )
             response = model.start_chat(history=history).send_message(user_message)
             result = json.loads(response.text)
