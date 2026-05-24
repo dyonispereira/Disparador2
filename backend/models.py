@@ -16,6 +16,9 @@ class Lead(Base):
     campaign_name = Column(String, nullable=True)
     sent_message = Column(String, nullable=True)
     sent_at = Column(DateTime, nullable=True)
+    etapa = Column(String, default="Novo Lead", nullable=True)
+    status_interesse = Column(String, nullable=True)   # quente / morno / frio
+    vendedor = Column(String, nullable=True)
 
     messages = relationship("Message", back_populates="lead")
 

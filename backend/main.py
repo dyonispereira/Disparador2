@@ -29,6 +29,9 @@ def _run_migrations():
             "ALTER TABLE conversation_states ADD COLUMN IF NOT EXISTS followup_sent BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE scheduled_meetings ADD COLUMN IF NOT EXISTS reminder_24h_sent BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE scheduled_meetings ADD COLUMN IF NOT EXISTS reminder_1h_sent  BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS etapa VARCHAR DEFAULT 'Novo Lead'",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS status_interesse VARCHAR",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS vendedor VARCHAR",
         ]:
             try:
                 conn.execute(text(sql))
@@ -150,6 +153,47 @@ def delete_all_leads(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao limpar banco: {str(e)}")
+
+# =========================
+# KANBAN CRM
+# =========================
+_ETAPAS = [
+    "Novo Lead", "Contato Iniciado", "Engajado", "Ligação Realizada",
+    "Apresentação Agendada", "Apresentação Realizada", "Proposta",
+    "Negociação", "Fechado", "Grupo Criado", "Aguardando Pagamento",
+    "Implantação Agendada", "Em Implantação", "Entrega Técnica",
+]
+
+@app.get("/leads/kanban")
+def get_leads_kanban(db: Session = Depends(get_db)):
+    leads = db.query(models.Lead).all()
+    board = {e: [] for e in _ETAPAS}
+    for lead in leads:
+        etapa = lead.etapa if lead.etapa in board else "Novo Lead"
+        board[etapa].append({
+            "id": lead.id,
+            "name": lead.name or "",
+            "phone": lead.phone,
+            "etapa": etapa,
+            "status_interesse": lead.status_interesse or "",
+            "vendedor": lead.vendedor or "",
+            "status": lead.status,
+            "sent_at": lead.sent_at.strftime("%d/%m %H:%M") if lead.sent_at else "",
+        })
+    return {"etapas": _ETAPAS, "board": board}
+
+
+@app.patch("/leads/{lead_id}/etapa")
+def update_lead_etapa(lead_id: int, body: dict, db: Session = Depends(get_db)):
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+    for field in ("etapa", "status_interesse", "vendedor"):
+        if field in body:
+            setattr(lead, field, body[field] or None)
+    db.commit()
+    return {"ok": True}
+
 
 # =========================
 # MESSAGE TEMPLATES (CRUD)
