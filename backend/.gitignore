@@ -12,3 +12,8 @@ venv/
 
 # Logs
 *.log
+
+# Credenciais e tokens sensíveis — nunca commitar
+credentials.json
+token.json
+settings.json

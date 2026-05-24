@@ -20,21 +20,40 @@
                 </button>
             </div>
         </div>
+        <!-- Tab navigation -->
+        <div class="max-w-7xl mx-auto px-4 flex space-x-1 pb-0">
+            <button onclick="showTab('leads')" id="tab-leads"
+                class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg bg-white text-indigo-700">
+                <i class="fa-solid fa-users mr-1"></i> Leads & Disparo
+            </button>
+            <button onclick="showTab('meetings')" id="tab-meetings"
+                class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg text-white/80 hover:bg-white/10 transition">
+                <i class="fa-solid fa-calendar-check mr-1"></i> Reuniões
+            </button>
+            <button onclick="showTab('settings')" id="tab-settings"
+                class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg text-white/80 hover:bg-white/10 transition">
+                <i class="fa-solid fa-gear mr-1"></i> Configurações
+            </button>
+        </div>
     </nav>
 
+    <!-- ════════════════════════════════════════════════════════
+         TAB: LEADS & DISPARO
+    ════════════════════════════════════════════════════════ -->
+    <div id="tab-leads-content" class="tab-content">
     <main class="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        <!-- Coluna Esquerda: Ações -->
+
+        <!-- Coluna Esquerda -->
         <div class="space-y-6">
-            
-            <!-- Box: Modal QR Code -->
+
+            <!-- QR Code -->
             <div id="qr-container" class="bg-white p-6 rounded-lg shadow-sm border border-slate-200 hidden text-center">
                 <h2 class="text-lg font-bold mb-2">Escaneie o QR Code</h2>
                 <p class="text-sm text-slate-500 mb-4">Abra o WhatsApp e aponte a câmera</p>
                 <img id="qr-image" src="" alt="QR Code" class="mx-auto border p-2 rounded-lg max-w-[200px]">
             </div>
 
-            <!-- Box: Upload Leads -->
+            <!-- Importar Leads -->
             <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
                 <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-solid fa-file-csv text-emerald-500 mr-2"></i>Importar Leads</h2>
                 <form id="upload-form" class="space-y-4">
@@ -43,13 +62,12 @@
                         <input type="file" id="csv-file" accept=".csv" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
                     </div>
                     <button type="submit" class="w-full bg-emerald-600 text-white py-2 rounded shadow hover:bg-emerald-700 transition">Importar Planilha</button>
-
                     <div class="relative flex py-2 items-center"><div class="flex-grow border-t border-slate-300"></div><span class="flex-shrink-0 mx-4 text-slate-400 text-xs">OU</span><div class="flex-grow border-t border-slate-300"></div></div>
                     <button type="button" onclick="carregarArquivoLocal()" class="w-full bg-slate-700 text-white py-2 rounded shadow hover:bg-slate-800 transition text-sm"><i class="fa-solid fa-folder-open mr-2"></i>Ler direto da pasta /dados</button>
                 </form>
             </div>
 
-            <!-- Box: Gerenciador de Mensagens -->
+            <!-- Gerenciador de Mensagens -->
             <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
                 <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-solid fa-comments text-purple-500 mr-2"></i>Gerenciador de Mensagens</h2>
                 <form id="message-template-form" class="space-y-4">
@@ -63,16 +81,19 @@
                 <div class="mt-6">
                     <h3 class="text-md font-semibold mb-2">Mensagens Salvas</h3>
                     <ul id="message-template-list" class="space-y-2 max-h-48 overflow-y-auto pr-2">
-                        <!-- Templates serão injetados aqui -->
                         <li class="text-center text-slate-400 text-sm">Carregando...</li>
                     </ul>
                 </div>
             </div>
 
-            <!-- Box: Disparo -->
+            <!-- Nova Campanha -->
             <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
                 <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-solid fa-paper-plane text-blue-500 mr-2"></i>Nova Campanha</h2>
                 <form id="send-form" class="space-y-4">
+                    <div>
+                        <label for="campaign-name" class="block text-sm font-medium text-slate-700 mb-1">Nome da Campanha</label>
+                        <input type="text" id="campaign-name" name="campaign-name" required class="w-full border border-slate-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: Leads Cuiabá - Maio">
+                    </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Imagem / Arquivo (Opcional)</label>
                         <input type="file" id="media-file" accept="image/*, .pdf, .mp4" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
@@ -82,24 +103,18 @@
                     </button>
                 </form>
             </div>
-
         </div>
 
-        <!-- Coluna Direita: Tabela -->
+        <!-- Coluna Direita: Leads -->
         <div class="md:col-span-2">
             <div class="bg-white rounded-lg shadow-sm border border-slate-200 h-full flex flex-col">
                 <div class="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
                     <h2 class="text-lg font-bold"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>Lista de Leads</h2>
                     <div class="space-x-3">
-                        <button onclick="limparLeads()" class="text-red-400 hover:text-red-600 transition" title="Limpar Toda a Lista">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                        <button onclick="carregarLeads()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar">
-                            <i class="fa-solid fa-arrows-rotate"></i>
-                        </button>
+                        <button onclick="limparLeads()" class="text-red-400 hover:text-red-600 transition" title="Limpar Toda a Lista"><i class="fa-solid fa-trash"></i></button>
+                        <button onclick="carregarLeads()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar"><i class="fa-solid fa-arrows-rotate"></i></button>
                     </div>
                 </div>
-                
                 <div class="flex-1 p-0 overflow-x-auto">
                     <table class="w-full text-left text-sm text-slate-600">
                         <thead class="bg-slate-100 text-slate-700 uppercase">
@@ -107,45 +122,241 @@
                                 <th class="px-6 py-3 font-semibold">ID</th>
                                 <th class="px-6 py-3 font-semibold">Nome</th>
                                 <th class="px-6 py-3 font-semibold">Telefone</th>
-                                <th class="px-6 py-3 font-semibold">Status</th>
+                                <th class="px-6 py-3 font-semibold text-center">Status</th>
+                                <th class="px-6 py-3 font-semibold">Última Mensagem</th>
+                                <th class="px-6 py-3 font-semibold">Data</th>
+                                <th class="px-6 py-3 font-semibold">Campanha</th>
                             </tr>
                         </thead>
                         <tbody id="leads-body" class="divide-y divide-slate-200">
-                            <!-- Leads serão injetados aqui -->
-                            <tr>
-                                <td colspan="4" class="px-6 py-4 text-center text-slate-400">Carregando leads...</td>
-                            </tr>
+                            <tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Carregando leads...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
     </main>
+    </div>
 
-    <!-- Lógica de Integração -->
+    <!-- ════════════════════════════════════════════════════════
+         TAB: REUNIÕES
+    ════════════════════════════════════════════════════════ -->
+    <div id="tab-meetings-content" class="tab-content hidden">
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-6">
+
+        <!-- Conversas ativas -->
+        <div class="bg-white rounded-lg shadow-sm border border-slate-200">
+            <div class="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
+                <h2 class="text-lg font-bold"><i class="fa-solid fa-comments text-teal-500 mr-2"></i>Conversas Ativas</h2>
+                <button onclick="carregarConversas()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-600">
+                    <thead class="bg-slate-100 text-slate-700 uppercase">
+                        <tr>
+                            <th class="px-4 py-3 font-semibold">Lead</th>
+                            <th class="px-4 py-3 font-semibold">Telefone</th>
+                            <th class="px-4 py-3 font-semibold text-center">Estado</th>
+                            <th class="px-4 py-3 font-semibold">Data Selecionada</th>
+                            <th class="px-4 py-3 font-semibold">Horário</th>
+                            <th class="px-4 py-3 font-semibold">Última atualização</th>
+                            <th class="px-4 py-3 font-semibold text-center">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="conversations-body" class="divide-y divide-slate-200">
+                        <tr><td colspan="7" class="px-4 py-4 text-center text-slate-400">Carregando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Reuniões confirmadas -->
+        <div class="bg-white rounded-lg shadow-sm border border-slate-200">
+            <div class="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
+                <h2 class="text-lg font-bold"><i class="fa-solid fa-calendar-check text-green-500 mr-2"></i>Reuniões Agendadas</h2>
+                <button onclick="carregarReunioes()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-600">
+                    <thead class="bg-slate-100 text-slate-700 uppercase">
+                        <tr>
+                            <th class="px-4 py-3 font-semibold">ID</th>
+                            <th class="px-4 py-3 font-semibold">Lead</th>
+                            <th class="px-4 py-3 font-semibold">Telefone</th>
+                            <th class="px-4 py-3 font-semibold">Data</th>
+                            <th class="px-4 py-3 font-semibold">Horário</th>
+                            <th class="px-4 py-3 font-semibold">Google Meet</th>
+                            <th class="px-4 py-3 font-semibold text-center">Status</th>
+                            <th class="px-4 py-3 font-semibold">Criado em</th>
+                            <th class="px-4 py-3 font-semibold text-center">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="meetings-body" class="divide-y divide-slate-200">
+                        <tr><td colspan="9" class="px-4 py-4 text-center text-slate-400">Carregando reuniões...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         TAB: CONFIGURAÇÕES
+    ════════════════════════════════════════════════════════ -->
+    <div id="tab-settings-content" class="tab-content hidden">
+    <main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+        <!-- WhatsApp / Evolution API -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+            <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-brands fa-whatsapp text-green-500 mr-2"></i>Evolution API</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">URL da Evolution API</label>
+                    <input id="cfg-evolution-url" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="http://127.0.0.1:8080">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">API Key</label>
+                    <input id="cfg-api-key" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="ev_api_...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nome da Instância</label>
+                    <input id="cfg-instance" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="minha_instancia">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">URL Base do Webhook <span class="text-xs text-slate-400">(onde o backend é acessível)</span></label>
+                    <input id="cfg-webhook-url" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="http://localhost:8000">
+                </div>
+            </div>
+            <div class="mt-4">
+                <button onclick="configurarWebhook()" class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 transition text-sm">
+                    <i class="fa-solid fa-plug mr-1"></i> Registrar Webhook na Evolution API
+                </button>
+                <p id="webhook-result" class="text-xs text-slate-500 mt-2"></p>
+            </div>
+        </div>
+
+        <!-- Empresa / Vendas -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+            <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-solid fa-building text-indigo-500 mr-2"></i>Empresa & Vendas</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nome da Empresa</label>
+                    <input id="cfg-company" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="Nossa Empresa">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nome da Equipe de Vendas</label>
+                    <input id="cfg-seller" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="Equipe de Vendas">
+                </div>
+            </div>
+            <div class="mt-4">
+                <label class="block text-sm font-medium text-slate-700 mb-1">
+                    JID do Grupo de Vendedores no WhatsApp
+                    <span class="text-xs text-slate-400 ml-2">Ex: 120363XXXXXX@g.us</span>
+                </label>
+                <input id="cfg-vendor-group" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="120363000000000@g.us">
+                <p class="text-xs text-slate-500 mt-1">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    Para encontrar o JID: no Evolution API, envie uma mensagem para o grupo e veja o <code>remoteJid</code> no webhook.
+                </p>
+            </div>
+        </div>
+
+        <!-- Horários Disponíveis -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+            <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-solid fa-clock text-orange-500 mr-2"></i>Horários Disponíveis para Reunião</h2>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Um horário por linha (formato HH:MM)</label>
+            <textarea id="cfg-times" rows="8" class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono focus:ring-2 focus:ring-orange-400 outline-none"
+                placeholder="09:00&#10;10:00&#10;11:00&#10;14:00&#10;15:00&#10;16:00&#10;17:00"></textarea>
+        </div>
+
+        <!-- Google Meet -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+            <h2 class="text-lg font-bold mb-4 border-b pb-2"><i class="fa-brands fa-google text-red-500 mr-2"></i>Google Meet / Calendar</h2>
+            <div id="google-status-box" class="mb-4 p-3 rounded-lg bg-slate-50 border text-sm space-y-1">
+                <p>Verificando...</p>
+            </div>
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 space-y-2">
+                <p class="font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Como configurar o Google Meet:</p>
+                <ol class="list-decimal list-inside space-y-1 text-xs">
+                    <li>Acesse <a href="https://console.cloud.google.com/" target="_blank" class="underline">console.cloud.google.com</a></li>
+                    <li>Crie um projeto e ative a <b>Google Calendar API</b></li>
+                    <li>Em "Credenciais" → Criar → OAuth 2.0 → Aplicativo de Desktop</li>
+                    <li>Baixe o JSON e salve como <code class="bg-amber-100 px-1 rounded">backend/credentials.json</code></li>
+                    <li>No terminal do backend, execute: <code class="bg-amber-100 px-1 rounded">python setup_google_auth.py</code></li>
+                    <li>Uma aba do navegador abrirá para autorizar. Clique em Permitir.</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- Salvar -->
+        <div class="flex justify-end">
+            <button onclick="salvarConfiguracoes()" class="bg-indigo-600 text-white px-8 py-3 rounded-lg shadow hover:bg-indigo-700 transition font-semibold text-sm">
+                <i class="fa-solid fa-floppy-disk mr-2"></i> Salvar Configurações
+            </button>
+        </div>
+        <p id="save-result" class="text-center text-sm text-slate-500"></p>
+    </main>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         JAVASCRIPT
+    ════════════════════════════════════════════════════════ -->
     <script>
         const API_BASE = "http://127.0.0.1:8000";
 
-        // Formatar Status com cores
+        // ──────────────────────────────────────────
+        // TAB NAVIGATION
+        // ──────────────────────────────────────────
+        function showTab(name) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('bg-white', 'text-indigo-700');
+                el.classList.add('text-white/80');
+            });
+            document.getElementById(`tab-${name}-content`).classList.remove('hidden');
+            const btn = document.getElementById(`tab-${name}`);
+            btn.classList.add('bg-white', 'text-indigo-700');
+            btn.classList.remove('text-white/80');
+
+            if (name === 'meetings') { carregarReunioes(); carregarConversas(); }
+            if (name === 'settings') { carregarConfiguracoes(); verificarGoogle(); }
+        }
+
+        // ──────────────────────────────────────────
+        // STATUS BADGE
+        // ──────────────────────────────────────────
         function getStatusBadge(status) {
-            if (status.toLowerCase() === 'enviado') {
-                return `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Enviado</span>`;
-            } else if (status.toLowerCase() === 'falhou') {
-                return `<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">Falhou</span>`;
-            }
+            const s = (status || '').toLowerCase();
+            if (s === 'enviado' || s === 'confirmado') return `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">${status}</span>`;
+            if (s === 'falhou'  || s === 'cancelado')  return `<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">${status}</span>`;
             return `<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-xs font-bold">Pendente</span>`;
         }
 
-        // ==========================================
+        function getConvStateBadge(state) {
+            const map = {
+                idle: ['bg-slate-100 text-slate-600', 'Inativo'],
+                awaiting_date: ['bg-blue-100 text-blue-700', 'Aguardando data'],
+                awaiting_time: ['bg-purple-100 text-purple-700', 'Aguardando horário'],
+                awaiting_confirmation: ['bg-orange-100 text-orange-700', 'Aguardando confirmação'],
+                confirmed: ['bg-green-100 text-green-700', 'Confirmado'],
+                cancelled: ['bg-red-100 text-red-700', 'Cancelado'],
+            };
+            const [cls, label] = map[state] || ['bg-slate-100 text-slate-600', state];
+            return `<span class="${cls} px-2 py-1 rounded text-xs font-bold">${label}</span>`;
+        }
+
+        // ──────────────────────────────────────────
         // 1. WHATSAPP CONEXÃO
-        // ==========================================
+        // ──────────────────────────────────────────
         async function checarStatus() {
             try {
                 const res = await fetch(`${API_BASE}/whatsapp/status`);
                 const data = await res.json();
                 const badge = document.getElementById('status-badge');
-                
-                // Ajuste de acordo com o retorno da sua Evolution API
                 if (data && data.instance && data.instance.state === "open") {
                     badge.className = "px-3 py-1 rounded-full text-sm font-semibold bg-green-500 text-white shadow";
                     badge.innerHTML = '<i class="fa-solid fa-check-circle mr-1"></i> Conectado';
@@ -154,9 +365,7 @@
                     badge.className = "px-3 py-1 rounded-full text-sm font-semibold bg-red-500 text-white shadow";
                     badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> Desconectado';
                 }
-            } catch (error) {
-                console.error("Erro ao checar status:", error);
-            }
+            } catch (_) {}
         }
 
         async function conectarWhatsApp() {
@@ -164,141 +373,108 @@
                 alert("Solicitando QR Code... Aguarde alguns segundos.");
                 const res = await fetch(`${API_BASE}/whatsapp/connect`);
                 const data = await res.json();
-                
                 if (data.base64) {
                     document.getElementById('qr-image').src = data.base64;
                     document.getElementById('qr-container').classList.remove('hidden');
                 } else if (data.instance && data.instance.state === "open") {
-                    alert("O WhatsApp já está conectado!");
-                    checarStatus();
+                    alert("O WhatsApp já está conectado!"); checarStatus();
                 } else {
                     alert("Não foi possível carregar o QR Code. O servidor da Evolution está rodando?");
                 }
-            } catch (error) {
-                alert("Erro ao conectar na API.");
-            }
+            } catch (_) { alert("Erro ao conectar na API."); }
         }
 
-        // ==========================================
+        // ──────────────────────────────────────────
         // 2. LEADS
-        // ==========================================
+        // ──────────────────────────────────────────
         async function carregarLeads() {
             try {
                 const res = await fetch(`${API_BASE}/leads`);
                 const leads = await res.json();
                 const tbody = document.getElementById('leads-body');
-                
                 if (leads.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">Nenhum lead encontrado.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Nenhum lead encontrado.</td></tr>`;
                     return;
                 }
-
                 tbody.innerHTML = '';
                 leads.forEach(lead => {
+                    const sentAt = lead.sent_at
+                        ? new Date(lead.sent_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+                        : '-';
+                    const campaignBadge = lead.campaign_name
+                        ? `<span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-semibold">${lead.campaign_name}</span>`
+                        : '-';
                     tbody.innerHTML += `
                         <tr class="hover:bg-slate-50 transition">
                             <td class="px-6 py-4 border-b border-slate-100">${lead.id}</td>
                             <td class="px-6 py-4 border-b border-slate-100 font-medium">${lead.name || '-'}</td>
                             <td class="px-6 py-4 border-b border-slate-100">${lead.phone}</td>
-                            <td class="px-6 py-4 border-b border-slate-100">${getStatusBadge(lead.status || 'pendente')}</td>
-                        </tr>
-                    `;
+                            <td class="px-6 py-4 border-b border-slate-100 text-center">${getStatusBadge(lead.status)}</td>
+                            <td class="px-6 py-4 border-b border-slate-100 text-slate-500 truncate max-w-xs" title="${lead.sent_message || ''}">${lead.sent_message || 'Sem envio'}</td>
+                            <td class="px-6 py-4 border-b border-slate-100 text-slate-500">${sentAt}</td>
+                            <td class="px-6 py-4 border-b border-slate-100">${campaignBadge}</td>
+                        </tr>`;
                 });
-            } catch (error) {
-                console.error("Erro ao carregar leads:", error);
-            }
+            } catch (e) { console.error("Erro ao carregar leads:", e); }
         }
 
         async function limparLeads() {
             if (!confirm("Tem certeza que deseja APAGAR TODOS os leads? Esta ação não pode ser desfeita.")) return;
-            
             try {
                 const res = await fetch(`${API_BASE}/leads`, { method: "DELETE" });
-                if (res.ok) {
-                    alert("Todos os leads foram apagados da base de dados!");
-                    carregarLeads(); // Atualiza a tabela para mostrar vazio
-                } else {
-                    alert("Erro ao limpar banco de dados.");
-                }
-            } catch (error) {
-                alert("Erro de conexão ao tentar limpar.");
-            }
+                if (res.ok) { alert("Todos os leads foram apagados!"); carregarLeads(); }
+                else { alert("Erro ao limpar banco de dados."); }
+            } catch (_) { alert("Erro de conexão ao tentar limpar."); }
         }
 
-        // UPLOAD CSV
         document.getElementById('upload-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const fileInput = document.getElementById('csv-file');
             if (!fileInput.files.length) return alert("Selecione um arquivo CSV!");
-
             const formData = new FormData();
             formData.append("file", fileInput.files[0]);
-
             try {
-                const res = await fetch(`${API_BASE}/upload-leads-file`, {
-                    method: "POST",
-                    body: formData
-                });
+                const res = await fetch(`${API_BASE}/upload-leads-file`, { method: "POST", body: formData });
                 const data = await res.json();
-                
-                if (res.ok) {
-                    alert(`${data.created} leads importados com sucesso!`);
-                    carregarLeads(); // Atualiza a tabela
-                    fileInput.value = ""; // limpa o input
-                } else {
-                    alert(`Falha ao importar: ${data.detail || 'Verifique o formato do arquivo.'}`);
-                }
-            } catch (error) {
-                alert("Erro ao fazer upload do CSV.");
-            }
+                if (res.ok) { alert(`${data.created} leads importados com sucesso!`); carregarLeads(); fileInput.value = ""; }
+                else { alert(`Falha ao importar: ${data.detail || 'Verifique o formato do arquivo.'}`); }
+            } catch (_) { alert("Erro ao fazer upload do CSV."); }
         });
 
-    // CARREGAR DO ARQUIVO LOCAL DIRETO
-    async function carregarArquivoLocal() {
-        try {
-            const res = await fetch(`${API_BASE}/import-local-leads`, { method: "POST" });
-            const data = await res.json();
-            
-            if (res.ok) {
-                alert(`${data.created} leads importados com sucesso do arquivo local!`);
-                carregarLeads(); // Atualiza a tabela
-            } else {
-                alert(`Falha ao importar: ${data.detail}`);
-            }
-        } catch (error) {
-            alert("Erro ao conectar com a API para ler o arquivo local.");
+        async function carregarArquivoLocal() {
+            try {
+                const res = await fetch(`${API_BASE}/import-local-leads`, { method: "POST" });
+                const data = await res.json();
+                if (res.ok) { alert(`${data.created} leads importados com sucesso do arquivo local!`); carregarLeads(); }
+                else { alert(`Falha ao importar: ${data.detail}`); }
+            } catch (_) { alert("Erro ao conectar com a API para ler o arquivo local."); }
         }
-    }
 
-        // ==========================================
-        // 4. MESSAGE TEMPLATES
-        // ==========================================
+        // ──────────────────────────────────────────
+        // 3. MESSAGE TEMPLATES
+        // ──────────────────────────────────────────
         async function carregarMensagens() {
             try {
                 const res = await fetch(`${API_BASE}/message-templates`);
                 const templates = await res.json();
                 const list = document.getElementById('message-template-list');
-                
                 if (templates.length === 0) {
                     list.innerHTML = `<li class="text-center text-slate-400 text-sm">Nenhuma mensagem cadastrada.</li>`;
                     return;
                 }
-
                 list.innerHTML = '';
-                templates.forEach(template => {
-                    const escapedText = template.text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                templates.forEach(t => {
+                    const escaped = t.text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     list.innerHTML += `
                         <li class="bg-slate-50 p-3 rounded-md flex justify-between items-start text-sm">
-                            <p class="text-slate-700 break-all mr-4">${template.text}</p>
+                            <p class="text-slate-700 break-all mr-4">${t.text}</p>
                             <div class="flex-shrink-0 space-x-2">
-                                <button onclick="editarMensagem(${template.id}, '${escapedText}')" class="text-slate-400 hover:text-blue-600" title="Editar"><i class="fa-solid fa-pencil"></i></button>
-                                <button onclick="excluirMensagem(${template.id})" class="text-slate-400 hover:text-red-600" title="Excluir"><i class="fa-solid fa-trash"></i></button>
+                                <button onclick="editarMensagem(${t.id}, '${escaped}')" class="text-slate-400 hover:text-blue-600" title="Editar"><i class="fa-solid fa-pencil"></i></button>
+                                <button onclick="excluirMensagem(${t.id})" class="text-slate-400 hover:text-red-600" title="Excluir"><i class="fa-solid fa-trash"></i></button>
                             </div>
-                        </li>
-                    `;
+                        </li>`;
                 });
-            } catch (error) {
-                console.error("Erro ao carregar mensagens:", error);
+            } catch (e) {
                 document.getElementById('message-template-list').innerHTML = `<li class="text-center text-red-500 text-sm">Erro ao carregar.</li>`;
             }
         }
@@ -308,90 +484,241 @@
             const textInput = document.getElementById('new-msg-text');
             const text = textInput.value;
             if (!text) return alert("O texto da mensagem não pode estar vazio!");
-
             try {
                 const res = await fetch(`${API_BASE}/message-templates`, {
-                    method: "POST",
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text })
+                    method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
                 });
-                if (res.ok) {
-                    textInput.value = ""; // Limpa o campo
-                    carregarMensagens(); // Atualiza a lista
-                } else {
-                    alert("Erro ao adicionar mensagem.");
-                }
-            } catch (error) {
-                alert("Erro de conexão ao adicionar mensagem.");
-            }
+                if (res.ok) { textInput.value = ""; carregarMensagens(); }
+                else { alert("Erro ao adicionar mensagem."); }
+            } catch (_) { alert("Erro de conexão ao adicionar mensagem."); }
         });
 
         async function excluirMensagem(id) {
             if (!confirm("Tem certeza que deseja excluir esta mensagem?")) return;
             try {
                 const res = await fetch(`${API_BASE}/message-templates/${id}`, { method: "DELETE" });
-                if (res.ok) {
-                    carregarMensagens();
-                } else {
-                    alert("Erro ao excluir mensagem.");
-                }
-            } catch (error) {
-                alert("Erro de conexão ao excluir.");
-            }
+                if (res.ok) carregarMensagens(); else alert("Erro ao excluir mensagem.");
+            } catch (_) { alert("Erro de conexão ao excluir."); }
         }
 
         async function editarMensagem(id, currentText) {
             const newText = prompt("Edite a mensagem:", currentText);
-            if (newText === null || newText.trim() === "") return; // User cancelled or entered empty text
-
+            if (newText === null || newText.trim() === "") return;
             try {
                 const res = await fetch(`${API_BASE}/message-templates/${id}`, {
-                    method: "PUT",
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: newText })
+                    method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: newText })
                 });
-                if (res.ok) {
-                    carregarMensagens();
-                } else {
-                    alert("Erro ao editar mensagem.");
-                }
-            } catch (error) {
-                alert("Erro de conexão ao editar.");
-            }
+                if (res.ok) carregarMensagens(); else alert("Erro ao editar mensagem.");
+            } catch (_) { alert("Erro de conexão ao editar."); }
         }
 
-        // ==========================================
-        // 3. DISPARAR
-        // ==========================================
+        // ──────────────────────────────────────────
+        // 4. DISPARO
+        // ──────────────────────────────────────────
         document.getElementById('send-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const campaignNameInput = document.getElementById('campaign-name');
+            const campaignName = campaignNameInput.value.trim();
+            if (!campaignName) { alert("O nome da campanha é obrigatório!"); campaignNameInput.focus(); return; }
             const fileInput = document.getElementById('media-file');
-
             const formData = new FormData();
-            if (fileInput.files.length > 0) {
-                formData.append("file", fileInput.files[0]);
-            }
-
+            formData.append("campaign_name", campaignName);
+            if (fileInput.files.length > 0) formData.append("file", fileInput.files[0]);
             try {
                 const btn = e.target.querySelector('button');
                 btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Enviando...`;
-                
                 const res = await fetch(`${API_BASE}/send`, { method: "POST", body: formData });
                 const data = await res.json();
-                
                 alert(`Disparo finalizado! Enviados: ${data.enviados} de ${data.total}`);
-                carregarLeads(); // Atualiza os status na tabela
-                
+                carregarLeads();
                 btn.innerHTML = `<i class="fa-solid fa-rocket mr-2"></i> Iniciar Disparo`;
-            } catch (error) {
-                alert("Erro ao realizar os disparos.");
-            }
+            } catch (_) { alert("Erro ao realizar os disparos."); }
         });
 
+        // ──────────────────────────────────────────
+        // 5. REUNIÕES
+        // ──────────────────────────────────────────
+        async function carregarReunioes() {
+            try {
+                const res = await fetch(`${API_BASE}/meetings`);
+                const meetings = await res.json();
+                const tbody = document.getElementById('meetings-body');
+                if (!meetings.length) {
+                    tbody.innerHTML = `<tr><td colspan="9" class="px-4 py-4 text-center text-slate-400">Nenhuma reunião agendada ainda.</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = '';
+                meetings.forEach(m => {
+                    const dateLabel = m.meeting_date
+                        ? new Date(m.meeting_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                        : '-';
+                    const createdAt = m.created_at
+                        ? new Date(m.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+                        : '-';
+                    const meetCell = m.meet_link && m.meet_link.startsWith('http')
+                        ? `<a href="${m.meet_link}" target="_blank" class="text-indigo-600 hover:underline text-xs"><i class="fa-brands fa-google mr-1"></i>Abrir</a>`
+                        : `<span class="text-slate-400 text-xs">—</span>`;
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="px-4 py-3 border-b border-slate-100">${m.id}</td>
+                            <td class="px-4 py-3 border-b border-slate-100 font-medium">${m.lead_name}</td>
+                            <td class="px-4 py-3 border-b border-slate-100">${m.lead_phone}</td>
+                            <td class="px-4 py-3 border-b border-slate-100">${dateLabel}</td>
+                            <td class="px-4 py-3 border-b border-slate-100">${m.meeting_time}h</td>
+                            <td class="px-4 py-3 border-b border-slate-100">${meetCell}</td>
+                            <td class="px-4 py-3 border-b border-slate-100 text-center">${getStatusBadge(m.status)}</td>
+                            <td class="px-4 py-3 border-b border-slate-100 text-slate-500 text-xs">${createdAt}</td>
+                            <td class="px-4 py-3 border-b border-slate-100 text-center">
+                                <button onclick="excluirReuniao(${m.id})" class="text-red-400 hover:text-red-600" title="Excluir"><i class="fa-solid fa-trash text-xs"></i></button>
+                            </td>
+                        </tr>`;
+                });
+            } catch (e) { console.error("Erro ao carregar reuniões:", e); }
+        }
+
+        async function excluirReuniao(id) {
+            if (!confirm("Excluir esta reunião do sistema?")) return;
+            try {
+                const res = await fetch(`${API_BASE}/meetings/${id}`, { method: "DELETE" });
+                if (res.ok) carregarReunioes(); else alert("Erro ao excluir reunião.");
+            } catch (_) { alert("Erro de conexão."); }
+        }
+
+        // ──────────────────────────────────────────
+        // 6. CONVERSAS
+        // ──────────────────────────────────────────
+        async function carregarConversas() {
+            try {
+                const res = await fetch(`${API_BASE}/conversations`);
+                const convs = await res.json();
+                const tbody = document.getElementById('conversations-body');
+                if (!convs.length) {
+                    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-4 text-center text-slate-400">Nenhuma conversa iniciada ainda.</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = '';
+                convs.forEach(c => {
+                    const updatedAt = c.updated_at
+                        ? new Date(c.updated_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
+                        : '-';
+                    const dateLabel = c.selected_date
+                        ? new Date(c.selected_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                        : '—';
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="px-4 py-3 border-b border-slate-100 font-medium">${c.lead_name || '—'}</td>
+                            <td class="px-4 py-3 border-b border-slate-100">${c.phone}</td>
+                            <td class="px-4 py-3 border-b border-slate-100 text-center">${getConvStateBadge(c.state)}</td>
+                            <td class="px-4 py-3 border-b border-slate-100">${dateLabel}</td>
+                            <td class="px-4 py-3 border-b border-slate-100">${c.selected_time ? c.selected_time + 'h' : '—'}</td>
+                            <td class="px-4 py-3 border-b border-slate-100 text-slate-500 text-xs">${updatedAt}</td>
+                            <td class="px-4 py-3 border-b border-slate-100 text-center">
+                                <button onclick="resetarConversa('${c.phone}')" class="text-orange-400 hover:text-orange-600 text-xs" title="Reiniciar fluxo">
+                                    <i class="fa-solid fa-rotate-left mr-1"></i>Reset
+                                </button>
+                            </td>
+                        </tr>`;
+                });
+            } catch (e) { console.error("Erro ao carregar conversas:", e); }
+        }
+
+        async function resetarConversa(phone) {
+            if (!confirm(`Reiniciar o fluxo de conversa para ${phone}?`)) return;
+            try {
+                const res = await fetch(`${API_BASE}/conversations/${phone}`, { method: "DELETE" });
+                if (res.ok) carregarConversas(); else alert("Erro ao resetar conversa.");
+            } catch (_) { alert("Erro de conexão."); }
+        }
+
+        // ──────────────────────────────────────────
+        // 7. CONFIGURAÇÕES
+        // ──────────────────────────────────────────
+        async function carregarConfiguracoes() {
+            try {
+                const res = await fetch(`${API_BASE}/settings`);
+                const s = await res.json();
+                document.getElementById('cfg-evolution-url').value = s.evolution_url || '';
+                document.getElementById('cfg-api-key').value      = s.api_key       || '';
+                document.getElementById('cfg-instance').value     = s.instance      || '';
+                document.getElementById('cfg-webhook-url').value  = s.webhook_base_url || '';
+                document.getElementById('cfg-company').value      = s.company_name  || '';
+                document.getElementById('cfg-seller').value       = s.seller_name   || '';
+                document.getElementById('cfg-vendor-group').value = s.vendor_group_jid || '';
+                document.getElementById('cfg-times').value        = (s.available_times || []).join('\n');
+            } catch (e) { console.error("Erro ao carregar configurações:", e); }
+        }
+
+        async function salvarConfiguracoes() {
+            const timesRaw = document.getElementById('cfg-times').value;
+            const times = timesRaw.split('\n').map(t => t.trim()).filter(t => /^\d{2}:\d{2}$/.test(t));
+
+            const body = {
+                evolution_url:    document.getElementById('cfg-evolution-url').value.trim(),
+                api_key:          document.getElementById('cfg-api-key').value.trim(),
+                instance:         document.getElementById('cfg-instance').value.trim(),
+                webhook_base_url: document.getElementById('cfg-webhook-url').value.trim(),
+                company_name:     document.getElementById('cfg-company').value.trim(),
+                seller_name:      document.getElementById('cfg-seller').value.trim(),
+                vendor_group_jid: document.getElementById('cfg-vendor-group').value.trim(),
+                available_times:  times,
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/settings`, {
+                    method: "PUT", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                });
+                const result = document.getElementById('save-result');
+                if (res.ok) {
+                    result.textContent = '✅ Configurações salvas com sucesso!';
+                    result.className = 'text-center text-sm text-green-600';
+                } else {
+                    result.textContent = '❌ Erro ao salvar configurações.';
+                    result.className = 'text-center text-sm text-red-600';
+                }
+                setTimeout(() => result.textContent = '', 4000);
+            } catch (_) { alert("Erro de conexão ao salvar."); }
+        }
+
+        async function configurarWebhook() {
+            try {
+                await salvarConfiguracoes();
+                const res = await fetch(`${API_BASE}/webhook/configure`, { method: "POST" });
+                const data = await res.json();
+                const p = document.getElementById('webhook-result');
+                if (data.ok) {
+                    p.textContent = `✅ Webhook registrado: ${data.webhook_url}`;
+                    p.className = 'text-xs text-green-600 mt-2';
+                } else {
+                    p.textContent = `❌ Erro: ${data.error || data.response || 'desconhecido'}`;
+                    p.className = 'text-xs text-red-600 mt-2';
+                }
+            } catch (_) { alert("Erro ao configurar webhook."); }
+        }
+
+        async function verificarGoogle() {
+            try {
+                const res = await fetch(`${API_BASE}/google/status`);
+                const data = await res.json();
+                const box = document.getElementById('google-status-box');
+                const credOk  = data.credentials_file;
+                const authOk  = data.authenticated;
+                box.innerHTML = `
+                    <p>${credOk ? '✅' : '❌'} <b>credentials.json</b> ${credOk ? 'encontrado' : 'NÃO encontrado'}</p>
+                    <p>${authOk ? '✅' : '❌'} <b>token.json</b> ${authOk ? 'válido (autenticado)' : 'NÃO encontrado — execute setup_google_auth.py'}</p>
+                `;
+                box.className = `mb-4 p-3 rounded-lg border text-sm space-y-1 ${authOk ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`;
+            } catch (e) {
+                document.getElementById('google-status-box').innerHTML = '<p class="text-red-500">Erro ao verificar status do Google.</p>';
+            }
+        }
+
+        // ──────────────────────────────────────────
         // INIT
+        // ──────────────────────────────────────────
         checarStatus();
         carregarLeads();
         carregarMensagens();
+        setInterval(checarStatus, 30000);
     </script>
 </body>
 </html>

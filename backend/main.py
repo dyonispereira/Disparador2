@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from io import StringIO
@@ -8,6 +8,7 @@ import base64
 import re
 import random
 import asyncio
+from datetime import datetime
 
 import models
 import schemas
@@ -147,8 +148,15 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
         decoded = decoded.replace('\x00', '').replace('\r\n', '\n').replace('\r', '\n').replace('\ufeff', '')
 
         # Lê o CSV identificando automaticamente se é separado por vírgula ou ponto e vírgula
-        reader = csv.reader(StringIO(decoded), delimiter=';' if ';' in decoded else ',')
+        # Detecta o delimitador (ponto e vírgula, tabulação ou vírgula)
+        if ';' in decoded:
+            delimiter = ';'
+        elif '\t' in decoded:
+            delimiter = '\t'
+        else:
+            delimiter = ','
 
+        reader = csv.reader(StringIO(decoded, newline=''), delimiter=delimiter)
         created = 0
 
         for row in reader:
@@ -159,6 +167,10 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
 
                 name = row[0].strip()
                 phone_raw = row[1].strip()
+
+                # Heurística: Se o campo "nome" parece um template de mensagem, ignora-o.
+                if "{" in name and "}" in name and len(name) > 30:
+                    name = ""
                 
                 # Se a planilha tiver a coluna de status, tenta usá-la, senão é pendente
                 status_planilha = row[2].strip().lower() if len(row) > 2 else "pendente"
@@ -234,7 +246,15 @@ def import_local_leads(db: Session = Depends(get_db)):
         # Padroniza quebras de linha (Mac/Windows/Linux) e remove NUL bytes e BOM
         decoded = decoded.replace('\x00', '').replace('\r\n', '\n').replace('\r', '\n').replace('\ufeff', '')
 
-        reader = csv.reader(StringIO(decoded, newline=''), delimiter=';' if ';' in decoded else ',')
+        # Detecta o delimitador (ponto e vírgula, tabulação ou vírgula)
+        if ';' in decoded:
+            delimiter = ';'
+        elif '\t' in decoded:
+            delimiter = '\t'
+        else:
+            delimiter = ','
+
+        reader = csv.reader(StringIO(decoded, newline=''), delimiter=delimiter)
         created = 0
 
         for row in reader:
@@ -244,6 +264,10 @@ def import_local_leads(db: Session = Depends(get_db)):
 
                 name = row[0].strip()
                 phone_raw = row[1].strip()
+
+                # Heurística: Se o campo "nome" parece um template de mensagem, ignora-o.
+                if "{" in name and "}" in name and len(name) > 30:
+                    name = ""
                 
                 # Puxa o status caso exista na planilha importada
                 status_planilha = row[2].strip().lower() if len(row) > 2 else "pendente"
@@ -314,6 +338,7 @@ def get_messages(db: Session = Depends(get_db)):
 # =========================
 @app.post("/send")
 async def send(
+    campaign_name: str = Form(...),
     file: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
@@ -352,7 +377,7 @@ async def send(
             
             # 1. Sorteia uma mensagem aleatória
             chosen_template = random.choice(templates)
-            text = chosen_template.text.replace("{name}", lead.name)
+            text = chosen_template.text.replace("{name}", lead.name or "")
             
             final_status_code = 500  # Assume falha por padrão
 
@@ -396,6 +421,10 @@ async def send(
             else:
                 lead.status = "falhou"
             
+            lead.campaign_name = campaign_name
+            lead.sent_message = text
+            lead.sent_at = datetime.utcnow()
+
             db.commit() # Salva o status de cada lead imediatamente
 
             # 4. Delay entre leads (não aplica no último)
@@ -414,10 +443,12 @@ async def send(
                 file_path = os.path.join(output_dir, "leads.csv")
                 all_leads = db.query(models.Lead).all()
                 with open(file_path, "w", newline="", encoding="utf-8-sig") as f:
-                    writer = csv.writer(f, delimiter=";")
-                    writer.writerow(["Nome", "Telefone", "Status"]) # Recria o cabeçalho
+                    # Usa ponto e vírgula (padrão Excel BR) e força aspas em todos os campos para máxima compatibilidade.
+                    writer = csv.writer(f, delimiter=";", quoting=csv.QUOTE_ALL)
+                    writer.writerow(["Nome", "Telefone", "Status", "Mensagem Enviada", "Data Disparo", "Campanha"]) # Recria o cabeçalho
                     for l in all_leads:
-                        writer.writerow([l.name, l.phone, l.status])
+                        sent_at_str = l.sent_at.strftime("%Y-%m-%d %H:%M:%S") if l.sent_at else ""
+                        writer.writerow([l.name, l.phone, l.status, l.sent_message, sent_at_str, l.campaign_name])
         except Exception as e:
             print(f"Erro ao atualizar a planilha local: {e}")
 
@@ -455,3 +486,244 @@ def connect_whatsapp():
         return r.json()
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# =========================
+# CONFIGURAÇÕES
+# =========================
+@app.get("/settings")
+def get_settings():
+    from config import load_settings
+    return load_settings()
+
+
+@app.put("/settings")
+def update_settings(body: dict, db: Session = Depends(get_db)):
+    from config import load_settings, save_settings
+    save_settings(body)
+    return {"ok": True, "settings": load_settings()}
+
+
+# =========================
+# WEBHOOK – Evolution API → Backend
+# =========================
+@app.get("/webhook/evolution")
+def webhook_evolution_verify():
+    return {"ok": True, "status": "webhook ativo"}
+
+
+@app.post("/webhook/evolution")
+async def webhook_evolution(request: Request):
+    from config import load_settings
+    from services.scheduling_flow import handle_incoming
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"ok": False, "error": "invalid json"}
+
+    print(f"[webhook] raw payload keys: {list(payload.keys())}")
+
+    event = payload.get("event", "")
+    if event not in ("messages.upsert", "MESSAGES_UPSERT"):
+        print(f"[webhook] skipped event: {event}")
+        return {"ok": True, "skipped": f"event={event}"}
+
+    # Evolution API pode mandar data como objeto ou como lista de objetos
+    raw_data = payload.get("data", {})
+    messages = raw_data if isinstance(raw_data, list) else [raw_data]
+
+    results = []
+    for data in messages:
+        if not isinstance(data, dict):
+            continue
+
+        key = data.get("key", {})
+        print(f"[webhook] key: {key}")
+
+        if key.get("fromMe"):
+            print("[webhook] skipped: fromMe")
+            continue
+
+        remote_jid = key.get("remoteJid", "")
+        if remote_jid.endswith("@g.us"):
+            print(f"[webhook] skipped: group {remote_jid}")
+            continue
+
+        phone = remote_jid.replace("@s.whatsapp.net", "").replace("@c.us", "")
+        if not phone:
+            continue
+
+        msg_obj = data.get("message", {})
+        text = (
+            msg_obj.get("conversation")
+            or (msg_obj.get("extendedTextMessage") or {}).get("text")
+            or (msg_obj.get("imageMessage") or {}).get("caption")
+            or ""
+        )
+
+        print(f"[webhook] phone={phone} text={repr(text)}")
+
+        if not text.strip():
+            continue
+
+        db = SessionLocal()
+        try:
+            settings = load_settings()
+
+            # Busca nome do lead (tenta 8 e 9 dígitos brasileiros)
+            def _variants(p):
+                vs = [p]
+                if p.startswith("55") and len(p) == 12:
+                    vs.append(p[:4] + "9" + p[4:])
+                elif p.startswith("55") and len(p) == 13 and p[4] == "9":
+                    vs.append(p[:4] + p[5:])
+                return vs
+            lead = db.query(models.Lead).filter(models.Lead.phone.in_(_variants(phone))).first()
+            lead_name = (lead.name or "Lead") if lead else "Lead"
+
+            # Alerta comercial para o grupo
+            vendor_jid = settings.get("vendor_group_jid", "")
+            if vendor_jid:
+                phone_display = phone[2:] if phone.startswith("55") else phone
+                data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+                alert = (
+                    f"\U0001f6a8 *ALERTA COMERCIAL*\n\n"
+                    f"Time, atenção!\n\n"
+                    f"O lead *{lead_name}* acabou de responder no WhatsApp.\n\n"
+                    f"\U0001f4de Telefone: {phone_display}\n"
+                    f"\U0001f552 Data/Hora: {data_hora}\n"
+                    f"\U0001f4ac Mensagem: \"{text.strip()}\"\n\n"
+                    f"⚡ *URGENTE:* entrar em contato o quanto antes!"
+                )
+                try:
+                    headers = {"apikey": settings["api_key"], "Content-Type": "application/json"}
+                    requests.post(
+                        f"{settings['evolution_url']}/message/sendText/{settings['instance']}",
+                        json={"number": vendor_jid, "text": alert},
+                        headers=headers,
+                        timeout=10,
+                    )
+                except Exception:
+                    pass
+
+            handled = handle_incoming(phone=phone, raw_text=text, db=db, settings=settings)
+            print(f"[webhook] handled={handled} phone={phone}")
+            results.append({"phone": phone, "handled": handled})
+        except Exception as exc:
+            print(f"[webhook] ERROR processing {phone}: {exc}")
+            import traceback; traceback.print_exc()
+        finally:
+            db.close()
+
+    return {"ok": True, "processed": len(results), "results": results}
+
+
+@app.post("/webhook/configure")
+def configure_webhook():
+    import json as _json
+    from config import load_settings
+    settings = load_settings()
+    base_url = settings.get("webhook_base_url", "http://localhost:8000")
+    webhook_url = f"{base_url}/webhook/evolution"
+
+    # Monta o JSON manualmente para evitar que o linter altere os valores
+    _ev = "MESSAGES_UPSERT"
+    body = _json.dumps({
+        "webhook": {
+            "url": webhook_url,
+            "enabled": True,
+            "webhookByEvents": False,
+            "webhookBase64": False,
+            "events": [_ev],
+        }
+    })
+
+    headers = {"apikey": settings["api_key"], "Content-Type": "application/json"}
+    try:
+        r = requests.post(
+            f"{settings['evolution_url']}/webhook/set/{settings['instance']}",
+            data=body.encode(), headers=headers, timeout=10,
+        )
+        return {"ok": r.ok, "status": r.status_code, "webhook_url": webhook_url, "response": r.text}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# =========================
+# REUNIÕES AGENDADAS
+# =========================
+@app.get("/meetings")
+def get_meetings(db: Session = Depends(get_db)):
+    return db.query(models.ScheduledMeeting).order_by(
+        models.ScheduledMeeting.created_at.desc()
+    ).all()
+
+
+@app.delete("/meetings/{meeting_id}")
+def delete_meeting(meeting_id: int, db: Session = Depends(get_db)):
+    m = db.query(models.ScheduledMeeting).filter(models.ScheduledMeeting.id == meeting_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Reunião não encontrada")
+    db.delete(m)
+    db.commit()
+    return {"ok": True}
+
+
+# =========================
+# ESTADOS DE CONVERSA
+# =========================
+@app.get("/conversations")
+def get_conversations(db: Session = Depends(get_db)):
+    return db.query(models.ConversationState).order_by(
+        models.ConversationState.updated_at.desc()
+    ).all()
+
+
+@app.delete("/conversations/{phone}")
+def reset_conversation(phone: str, db: Session = Depends(get_db)):
+    conv = db.query(models.ConversationState).filter(models.ConversationState.phone == phone).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    conv.state = "idle"
+    conv.selected_date = None
+    conv.selected_time = None
+    conv.meet_link = None
+    conv.calendar_event_id = None
+    conv.updated_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True}
+
+
+# =========================
+# STATUS GOOGLE
+# =========================
+@app.get("/google/status")
+def google_status():
+    from services.google_meet import is_configured, is_authenticated
+    return {
+        "credentials_file": is_configured(),
+        "authenticated": is_authenticated(),
+    }
+
+
+# =========================
+# TESTE – simula resposta de lead sem precisar do WhatsApp
+# Uso: POST /testar?phone=5567991879095&texto=2
+# =========================
+@app.post("/testar")
+def testar_fluxo(phone: str, texto: str = "oi", db: Session = Depends(get_db)):
+    from config import load_settings
+    from services.scheduling_flow import handle_incoming
+    settings = load_settings()
+    lead = db.query(models.Lead).filter(models.Lead.phone == phone).first()
+    if not lead:
+        todos = [l.phone for l in db.query(models.Lead).limit(5).all()]
+        return {"erro": f"Lead {phone} nao encontrado", "phones": todos}
+    try:
+        handled = handle_incoming(phone=phone, raw_text=texto, db=db, settings=settings)
+        conv = db.query(models.ConversationState).filter(models.ConversationState.phone == phone).first()
+        return {"ok": True, "handled": handled, "lead": lead.name, "estado": conv.state if conv else None}
+    except Exception as exc:
+        import traceback
+        return {"ok": False, "erro": str(exc), "detalhe": traceback.format_exc()}

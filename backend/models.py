@@ -13,6 +13,9 @@ class Lead(Base):
     phone = Column(String, unique=True)
     status = Column(String, default="pendente")
     created_at = Column(DateTime, default=datetime.utcnow)
+    campaign_name = Column(String, nullable=True)
+    sent_message = Column(String, nullable=True)
+    sent_at = Column(DateTime, nullable=True)
 
     messages = relationship("Message", back_populates="lead")
 
@@ -34,3 +37,38 @@ class MessageTemplate(Base):
 
     id = Column(Integer, primary_key=True)
     text = Column(String, nullable=False)
+
+
+class ConversationState(Base):
+    """Tracks where each lead is in the scheduling conversation flow."""
+    __tablename__ = "conversation_states"
+
+    id = Column(Integer, primary_key=True)
+    phone = Column(String, unique=True, nullable=False)
+    lead_name = Column(String, nullable=True)
+    # idle | awaiting_date | awaiting_time | awaiting_confirmation | confirmed | cancelled
+    state = Column(String, default="idle")
+    selected_date = Column(String, nullable=True)       # YYYY-MM-DD
+    selected_time = Column(String, nullable=True)       # HH:MM
+    offered_dates = Column(String, nullable=True)       # JSON list of YYYY-MM-DD strings
+    offered_times = Column(String, nullable=True)       # JSON list of HH:MM strings
+    meet_link = Column(String, nullable=True)
+    calendar_event_id = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScheduledMeeting(Base):
+    """Confirmed or pending meetings created through the WhatsApp scheduling flow."""
+    __tablename__ = "scheduled_meetings"
+
+    id = Column(Integer, primary_key=True)
+    lead_name = Column(String, nullable=False)
+    lead_phone = Column(String, nullable=False)
+    meeting_date = Column(String, nullable=False)       # YYYY-MM-DD
+    meeting_time = Column(String, nullable=False)       # HH:MM
+    meet_link = Column(String, nullable=True)
+    calendar_event_id = Column(String, nullable=True)
+    # pendente | confirmado | cancelado
+    status = Column(String, default="pendente")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    confirmed_at = Column(DateTime, nullable=True)

@@ -6,3 +6,6 @@ pandas
 openpyxl
 requests
 python-multipart
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
