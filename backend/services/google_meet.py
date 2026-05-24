@@ -61,14 +61,15 @@ def get_service():
     return build("calendar", "v3", credentials=creds)
 
 
-def create_meet_event(summary: str, date_str: str, time_str: str) -> dict:
+def create_meet_event(summary: str, date_str: str, time_str: str, attendee_emails: list[str] | None = None) -> dict:
     """
     Creates a Google Calendar event with a Google Meet link.
 
     Args:
-        summary:  Event title (e.g. "Reunião Empresa × João")
-        date_str: Date in YYYY-MM-DD format
-        time_str: Start time in HH:MM format (Brasília / America/Sao_Paulo)
+        summary:         Event title (e.g. "Reunião Empresa × João")
+        date_str:        Date in YYYY-MM-DD format
+        time_str:        Start time in HH:MM format (Brasília / America/Sao_Paulo)
+        attendee_emails: Optional list of email addresses to invite
 
     Returns:
         {"event_id": str, "meet_link": str | None, "html_link": str}
@@ -88,13 +89,14 @@ def create_meet_event(summary: str, date_str: str, time_str: str) -> dict:
                 "conferenceSolutionKey": {"type": "hangoutsMeet"},
             }
         },
+        "attendees": [{"email": e} for e in (attendee_emails or [])],
     }
 
     created = service.events().insert(
         calendarId="primary",
         body=event,
         conferenceDataVersion=1,
-        sendUpdates="none",
+        sendUpdates="all" if attendee_emails else "none",
     ).execute()
 
     meet_link = None

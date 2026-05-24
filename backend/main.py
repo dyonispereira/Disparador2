@@ -727,3 +727,68 @@ def testar_fluxo(phone: str, texto: str = "oi", db: Session = Depends(get_db)):
     except Exception as exc:
         import traceback
         return {"ok": False, "erro": str(exc), "detalhe": traceback.format_exc()}
+
+
+# =========================
+# PARTICIPANTES (TIME COMERCIAL)
+# =========================
+@app.get("/participantes")
+def get_participantes(db: Session = Depends(get_db)):
+    return db.query(models.Participante).order_by(models.Participante.id).all()
+
+
+@app.post("/participantes")
+def create_participante(body: dict, db: Session = Depends(get_db)):
+    nome = (body.get("nome") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    if not nome or not email:
+        raise HTTPException(status_code=400, detail="Nome e email são obrigatórios")
+    if db.query(models.Participante).filter(models.Participante.email == email).first():
+        raise HTTPException(status_code=400, detail="Email já cadastrado")
+    p = models.Participante(nome=nome, email=email)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@app.put("/participantes/{pid}")
+def update_participante(pid: int, body: dict, db: Session = Depends(get_db)):
+    p = db.query(models.Participante).filter(models.Participante.id == pid).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Participante não encontrado")
+    nome = (body.get("nome") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    if not nome or not email:
+        raise HTTPException(status_code=400, detail="Nome e email são obrigatórios")
+    conflito = db.query(models.Participante).filter(
+        models.Participante.email == email, models.Participante.id != pid
+    ).first()
+    if conflito:
+        raise HTTPException(status_code=400, detail="Email já cadastrado por outro participante")
+    p.nome = nome
+    p.email = email
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@app.patch("/participantes/{pid}/toggle")
+def toggle_participante(pid: int, db: Session = Depends(get_db)):
+    p = db.query(models.Participante).filter(models.Participante.id == pid).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Participante não encontrado")
+    p.ativo = not p.ativo
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@app.delete("/participantes/{pid}")
+def delete_participante(pid: int, db: Session = Depends(get_db)):
+    p = db.query(models.Participante).filter(models.Participante.id == pid).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Participante não encontrado")
+    db.delete(p)
+    db.commit()
+    return {"ok": True}

@@ -178,10 +178,14 @@ def _on_time_pick(conv, lead, text, db, settings) -> bool:
 
 def _create_meet_and_confirm(conv, lead, db, settings):
     from services.google_meet import create_meet_event
+    from models import Participante
 
     company = settings.get("company_name", "Nossa Empresa")
     d = datetime.strptime(conv.selected_date, "%Y-%m-%d").date()
     date_label = f"{_fmt_date(d)} ({d.strftime('%d/%m')})"
+
+    ativos = db.query(Participante).filter(Participante.ativo == True).all()
+    emails = [p.email for p in ativos]
 
     meet_link = None
     event_id = None
@@ -190,6 +194,7 @@ def _create_meet_and_confirm(conv, lead, db, settings):
             summary=f"Reunião {company} × {lead.name}",
             date_str=conv.selected_date,
             time_str=conv.selected_time,
+            attendee_emails=emails,
         )
         meet_link = result.get("meet_link")
         event_id = result.get("event_id")

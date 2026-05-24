@@ -30,6 +30,10 @@
                 class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg text-white/80 hover:bg-white/10 transition">
                 <i class="fa-solid fa-calendar-check mr-1"></i> Reuniões
             </button>
+            <button onclick="showTab('team')" id="tab-team"
+                class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg text-white/80 hover:bg-white/10 transition">
+                <i class="fa-solid fa-user-tie mr-1"></i> Time Comercial
+            </button>
             <button onclick="showTab('settings')" id="tab-settings"
                 class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg text-white/80 hover:bg-white/10 transition">
                 <i class="fa-solid fa-gear mr-1"></i> Configurações
@@ -205,6 +209,73 @@
     </div>
 
     <!-- ════════════════════════════════════════════════════════
+         TAB: TIME COMERCIAL
+    ════════════════════════════════════════════════════════ -->
+    <div id="tab-team-content" class="tab-content hidden">
+    <main class="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+        <!-- Formulário de cadastro -->
+        <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+            <h2 class="text-lg font-bold mb-4 border-b pb-2">
+                <i class="fa-solid fa-user-plus text-indigo-500 mr-2"></i>
+                <span id="form-team-title">Novo Participante</span>
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <input type="hidden" id="edit-participante-id">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Nome</label>
+                    <input id="input-nome-part" type="text" placeholder="João Silva"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Email</label>
+                    <input id="input-email-part" type="email" placeholder="joao@empresa.com"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="salvarParticipante()"
+                        class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition">
+                        <i class="fa-solid fa-floppy-disk mr-1"></i> Salvar
+                    </button>
+                    <button onclick="cancelarEdicaoParticipante()" id="btn-cancelar-part"
+                        class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-3 py-2 rounded-lg text-sm transition">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+            <p id="erro-participante" class="text-red-500 text-sm mt-2 hidden"></p>
+        </div>
+
+        <!-- Tabela de participantes -->
+        <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-lg font-bold">
+                    <i class="fa-solid fa-users text-indigo-500 mr-2"></i>Time Comercial
+                </h2>
+                <span id="badge-ativos" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold"></span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-slate-500 border-b">
+                            <th class="pb-2 w-10">#</th>
+                            <th class="pb-2">Nome</th>
+                            <th class="pb-2">Email</th>
+                            <th class="pb-2 text-center">Status</th>
+                            <th class="pb-2 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-participantes">
+                        <tr><td colspan="5" class="py-6 text-center text-slate-400">Carregando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
          TAB: CONFIGURAÇÕES
     ════════════════════════════════════════════════════════ -->
     <div id="tab-settings-content" class="tab-content hidden">
@@ -323,6 +394,7 @@
             btn.classList.remove('text-white/80');
 
             if (name === 'meetings') { carregarReunioes(); carregarConversas(); }
+            if (name === 'team') { carregarParticipantes(); }
             if (name === 'settings') { carregarConfiguracoes(); verificarGoogle(); }
         }
 
@@ -710,6 +782,97 @@
             } catch (e) {
                 document.getElementById('google-status-box').innerHTML = '<p class="text-red-500">Erro ao verificar status do Google.</p>';
             }
+        }
+
+        // ──────────────────────────────────────────
+        // TIME COMERCIAL – PARTICIPANTES
+        // ──────────────────────────────────────────
+        async function carregarParticipantes() {
+            try {
+                const res = await fetch(`${API_BASE}/participantes`);
+                const lista = await res.json();
+                const ativos = lista.filter(p => p.ativo).length;
+                document.getElementById('badge-ativos').textContent = `${ativos} ativo${ativos !== 1 ? 's' : ''} nas reuniões`;
+
+                const tbody = document.getElementById('tabela-participantes');
+                if (!lista.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-slate-400">Nenhum participante cadastrado.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = lista.map(p => `
+                    <tr class="border-b last:border-0 hover:bg-slate-50 transition">
+                        <td class="py-3 text-slate-400">${p.id}</td>
+                        <td class="py-3 font-medium">${p.nome}</td>
+                        <td class="py-3 text-slate-600">${p.email}</td>
+                        <td class="py-3 text-center">
+                            ${p.ativo
+                                ? '<span class="inline-flex items-center gap-1 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded-full">🟢 Ativo</span>'
+                                : '<span class="inline-flex items-center gap-1 bg-red-100 text-red-600 text-xs font-semibold px-2 py-1 rounded-full">🔴 Inativo</span>'
+                            }
+                        </td>
+                        <td class="py-3 text-right space-x-1">
+                            <button onclick="editarParticipante(${p.id}, '${p.nome.replace(/'/g,"\\'")}', '${p.email}')"
+                                class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-3 py-1 rounded-lg transition">
+                                <i class="fa-solid fa-pen mr-1"></i>Editar
+                            </button>
+                            <button onclick="toggleParticipante(${p.id})"
+                                class="text-xs ${p.ativo ? 'bg-red-50 hover:bg-red-100 text-red-600' : 'bg-green-50 hover:bg-green-100 text-green-700'} font-semibold px-3 py-1 rounded-lg transition">
+                                ${p.ativo ? '<i class="fa-solid fa-ban mr-1"></i>Desativar' : '<i class="fa-solid fa-check mr-1"></i>Ativar'}
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                document.getElementById('tabela-participantes').innerHTML =
+                    '<tr><td colspan="5" class="py-4 text-center text-red-500">Erro ao carregar participantes.</td></tr>';
+            }
+        }
+
+        async function salvarParticipante() {
+            const id = document.getElementById('edit-participante-id').value;
+            const nome = document.getElementById('input-nome-part').value.trim();
+            const email = document.getElementById('input-email-part').value.trim();
+            const errEl = document.getElementById('erro-participante');
+            errEl.classList.add('hidden');
+
+            if (!nome || !email) { errEl.textContent = 'Nome e email são obrigatórios.'; errEl.classList.remove('hidden'); return; }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Email inválido.'; errEl.classList.remove('hidden'); return; }
+
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API_BASE}/participantes/${id}` : `${API_BASE}/participantes`;
+
+            try {
+                const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({nome, email}) });
+                const data = await res.json();
+                if (!res.ok) { errEl.textContent = data.detail || 'Erro ao salvar.'; errEl.classList.remove('hidden'); return; }
+                cancelarEdicaoParticipante();
+                carregarParticipantes();
+            } catch (e) {
+                errEl.textContent = 'Erro de conexão.'; errEl.classList.remove('hidden');
+            }
+        }
+
+        function editarParticipante(id, nome, email) {
+            document.getElementById('edit-participante-id').value = id;
+            document.getElementById('input-nome-part').value = nome;
+            document.getElementById('input-email-part').value = email;
+            document.getElementById('form-team-title').textContent = 'Editar Participante';
+            document.getElementById('btn-cancelar-part').classList.remove('hidden');
+            document.getElementById('input-nome-part').focus();
+        }
+
+        function cancelarEdicaoParticipante() {
+            document.getElementById('edit-participante-id').value = '';
+            document.getElementById('input-nome-part').value = '';
+            document.getElementById('input-email-part').value = '';
+            document.getElementById('form-team-title').textContent = 'Novo Participante';
+            document.getElementById('btn-cancelar-part').classList.add('hidden');
+            document.getElementById('erro-participante').classList.add('hidden');
+        }
+
+        async function toggleParticipante(id) {
+            await fetch(`${API_BASE}/participantes/${id}/toggle`, { method: 'PATCH' });
+            carregarParticipantes();
         }
 
         // ──────────────────────────────────────────
