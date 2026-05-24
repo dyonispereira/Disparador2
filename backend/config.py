@@ -12,6 +12,7 @@ DEFAULT_SETTINGS = {
     "webhook_base_url": "http://localhost:8000",
     "company_name": "Nossa Empresa",
     "seller_name": "Equipe de Vendas",
+    "company_calendar_email": "",
 }
 
 

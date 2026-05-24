@@ -187,6 +187,11 @@ def _create_meet_and_confirm(conv, lead, db, settings):
     ativos = db.query(Participante).filter(Participante.ativo == True).all()
     emails = [p.email for p in ativos]
 
+    # Agenda da empresa — sempre convidada se configurada
+    company_cal = settings.get("company_calendar_email", "").strip()
+    if company_cal and company_cal not in emails:
+        emails.append(company_cal)
+
     meet_link = None
     event_id = None
     try:
