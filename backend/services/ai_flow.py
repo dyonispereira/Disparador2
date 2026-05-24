@@ -85,11 +85,12 @@ RESPONDA SOMENTE com JSON válido (sem texto fora):
     history = []
     try:
         for m in json.loads(conv.messages_json or "[]")[-8:]:
-            history.append({"role": m["role"], "parts": [m["content"]]})
+            role = "model" if m["role"] == "assistant" else "user"
+            history.append({"role": role, "parts": [m["content"]]})
     except Exception:
         pass
 
-    for model_name in ("gemini-2.0-flash", "gemini-2.0-flash-lite"):
+    for model_name in ("gemini-2.5-flash", "gemini-2.0-flash"):
         try:
             model = genai.GenerativeModel(
                 model_name,
@@ -99,7 +100,7 @@ RESPONDA SOMENTE com JSON válido (sem texto fora):
             response = model.start_chat(history=history).send_message(user_message)
             result = json.loads(response.text)
             if "message" in result and "action" in result:
-                print(f"[AI] {model_name} → action={result['action']} value={result.get('value')}")
+                print(f"[AI] {model_name} -> action={result['action']} value={result.get('value')}")
                 return result
         except Exception as e:
             print(f"[AI] {model_name} error: {e}")
