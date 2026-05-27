@@ -6,18 +6,63 @@
     <title>Disparador WhatsApp PRO</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+    <!-- ════ TELA DE LOGIN ════ -->
+    <div id="login-screen" class="fixed inset-0 z-[200] bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-700 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
+        <div class="text-center mb-7">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-indigo-100 mb-3">
+            <i class="fa-brands fa-whatsapp text-indigo-600 text-3xl"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-slate-800">Disparador CRM</h2>
+          <p class="text-sm text-slate-500 mt-1">Faça login para continuar</p>
+        </div>
+        <div id="login-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg text-center"></div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">EMAIL</label>
+            <input id="login-email" type="email" autocomplete="email"
+              class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+              placeholder="seu@email.com" onkeydown="if(event.key==='Enter')fazerLogin()">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">SENHA</label>
+            <div class="relative">
+              <input id="login-senha" type="password" autocomplete="current-password"
+                class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-400 outline-none pr-10"
+                placeholder="••••••••" onkeydown="if(event.key==='Enter')fazerLogin()">
+              <button type="button" onclick="toggleSenhaVisivel()"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <i id="login-eye" class="fa-solid fa-eye text-sm"></i>
+              </button>
+            </div>
+          </div>
+          <button onclick="fazerLogin()" id="btn-login"
+            class="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-semibold text-sm hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-right-to-bracket"></i> Entrar
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Navbar -->
     <nav class="bg-indigo-600 text-white shadow-md">
         <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <h1 class="text-xl font-bold"><i class="fa-brands fa-whatsapp mr-2"></i> Disparador PRO</h1>
+            <h1 class="text-xl font-bold"><i class="fa-brands fa-whatsapp mr-2"></i> Disparador CRM - IA PRO MASTER</h1>
             <div class="flex items-center space-x-4">
                 <span id="status-badge" class="px-3 py-1 rounded-full text-sm font-semibold bg-gray-400">Verificando...</span>
                 <button onclick="conectarWhatsApp()" class="bg-white text-indigo-600 px-4 py-2 rounded shadow hover:bg-indigo-50 transition font-medium">
                     <i class="fa-solid fa-qrcode mr-1"></i> Conectar
                 </button>
+                <div class="flex items-center gap-2 border-l border-indigo-400 pl-4">
+                  <span id="navbar-user" class="text-sm text-indigo-200 hidden"><i class="fa-solid fa-user-circle mr-1"></i><span id="navbar-user-nome"></span></span>
+                  <button onclick="fazerLogout()" class="text-sm bg-indigo-800/60 hover:bg-indigo-900 text-white px-3 py-1.5 rounded-lg transition hidden" id="btn-logout">
+                    <i class="fa-solid fa-right-from-bracket mr-1"></i> Sair
+                  </button>
+                </div>
             </div>
         </div>
         <!-- Tab navigation -->
@@ -37,6 +82,10 @@
             <button onclick="showTab('funil')" id="tab-funil"
                 class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg text-white/80 hover:bg-white/10 transition">
                 <i class="fa-solid fa-table-columns mr-1"></i> Funil CRM
+            </button>
+            <button onclick="showTab('dashboard')" id="tab-dashboard"
+                class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg text-white/80 hover:bg-white/10 transition">
+                <i class="fa-solid fa-chart-line mr-1"></i> Dashboard
             </button>
             <button onclick="showTab('settings')" id="tab-settings"
                 class="tab-btn px-5 py-2 text-sm font-semibold rounded-t-lg text-white/80 hover:bg-white/10 transition">
@@ -303,7 +352,8 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1">URL Base do Webhook <span class="text-xs text-slate-400">(onde o backend é acessível)</span></label>
-                    <input id="cfg-webhook-url" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="http://localhost:8000">
+                    <input id="cfg-webhook-url" type="text" class="w-full border border-slate-300 rounded-md p-2 text-sm" placeholder="http://localhost:8000"
+                        oninput="const b=this.value.trim().replace(/\/$/,'');document.getElementById('fb-webhook-url-display').textContent=b?b+'/webhook/facebook':'— salve a URL Base do Webhook primeiro —'">
                 </div>
             </div>
             <div class="mt-4">
@@ -414,6 +464,78 @@
             </div>
         </div>
 
+        <!-- Facebook Lead Ads -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+            <h2 class="text-lg font-bold mb-1 border-b pb-2">
+                <i class="fa-brands fa-facebook text-blue-600 mr-2"></i>Facebook Lead Ads
+            </h2>
+            <p class="text-xs text-slate-500 mb-4">
+                Quando alguém preencher o formulário da sua campanha, o lead cai automaticamente no card <strong>Novo Lead</strong> do Kanban.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">
+                        Token de Verificação
+                        <span class="text-xs text-slate-400 ml-1">— você escolhe</span>
+                    </label>
+                    <input id="cfg-fb-verify-token" type="text"
+                        class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
+                        placeholder="Ex: gestorpec-fb-leads-2024">
+                    <p class="text-xs text-slate-400 mt-1">Qualquer string. Você vai colar esse mesmo valor no painel do Facebook.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">
+                        Page Access Token
+                        <span class="text-xs text-slate-400 ml-1">— Meta for Developers</span>
+                    </label>
+                    <input id="cfg-fb-page-token" type="password"
+                        class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
+                        placeholder="EAAxxxx...">
+                    <p class="text-xs text-slate-400 mt-1">Token de longa duração da sua Página do Facebook.</p>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">
+                        App Secret
+                        <span class="text-xs text-slate-400 ml-1">— opcional, para verificar assinatura</span>
+                    </label>
+                    <input id="cfg-fb-app-secret" type="password"
+                        class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
+                        placeholder="deixe em branco se não quiser verificar assinatura">
+                </div>
+            </div>
+
+            <!-- URL do Webhook gerada automaticamente -->
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
+                <p class="text-xs font-semibold text-slate-600 mb-1">
+                    <i class="fa-solid fa-link text-indigo-400 mr-1"></i> URL do Webhook para configurar no Facebook:
+                </p>
+                <div class="flex items-center gap-2">
+                    <code id="fb-webhook-url-display" class="text-sm text-indigo-700 font-mono break-all flex-1">
+                        —
+                    </code>
+                    <button onclick="copiarFbWebhookUrl()" title="Copiar"
+                        class="text-slate-400 hover:text-indigo-600 transition flex-shrink-0">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Passo a passo -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900 space-y-1.5">
+                <p class="font-semibold"><i class="fa-solid fa-list-ol mr-1"></i> Como configurar no Meta for Developers:</p>
+                <ol class="list-decimal list-inside space-y-1 text-xs text-blue-800">
+                    <li>Acesse <strong>developers.facebook.com</strong> → seu App → <strong>Webhooks</strong></li>
+                    <li>Adicione um webhook para o objeto <strong>Page</strong> (ou <strong>leadgen</strong>)</li>
+                    <li>Cole a URL acima em "URL de Callback" e o <em>Token de Verificação</em> no campo correspondente</li>
+                    <li>Clique em <strong>Verificar e Salvar</strong> — o backend responderá ao desafio automaticamente</li>
+                    <li>Assine o campo <strong>leadgen</strong> na sua Página</li>
+                    <li>Gere um <strong>Page Access Token</strong> de longa duração e cole acima</li>
+                    <li>Salve as configurações aqui e pronto ✓</li>
+                </ol>
+            </div>
+        </div>
+
         <!-- Salvar -->
         <div class="flex justify-end">
             <button onclick="salvarConfiguracoes()" class="bg-indigo-600 text-white px-8 py-3 rounded-lg shadow hover:bg-indigo-700 transition font-semibold text-sm">
@@ -432,7 +554,30 @@
 
         <!-- Header + Filtros -->
         <div class="flex flex-wrap gap-3 mb-5 items-center">
-          <h2 class="text-xl font-bold text-slate-800 flex-1"><i class="fa-solid fa-table-columns text-indigo-500 mr-2"></i>Funil CRM</h2>
+          <h2 class="text-xl font-bold text-slate-800"><i class="fa-solid fa-table-columns text-indigo-500 mr-2"></i>Funil CRM</h2>
+
+          <!-- Seletor de quadro -->
+          <select id="kanban-board-sel" onchange="trocarQuadro()"
+            class="border-2 border-indigo-300 rounded-lg px-3 py-1.5 text-sm bg-white font-semibold text-indigo-700 focus:ring-2 focus:ring-indigo-400 outline-none">
+          </select>
+
+          <button onclick="abrirModalNovoQuadro()"
+            class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition flex items-center gap-1">
+            <i class="fa-solid fa-plus"></i> Novo Quadro
+          </button>
+
+          <button onclick="abrirModalEditarQuadro()"
+            class="border border-slate-300 text-slate-600 px-3 py-1.5 rounded-lg text-sm hover:bg-slate-100 transition" title="Editar quadro atual">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+
+          <button id="btn-deletar-quadro" onclick="deletarQuadro()"
+            class="border border-red-200 text-red-500 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 transition hidden" title="Excluir quadro">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+
+          <div class="flex-1"></div>
+
           <select id="kanban-filter-vendedor" onchange="renderKanban()"
             class="border border-slate-300 rounded-md px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-400 outline-none">
             <option value="">Todos os vendedores</option>
@@ -444,8 +589,8 @@
             <option value="morno">🌡️ Morno</option>
             <option value="frio">🧊 Frio</option>
           </select>
-          <button onclick="carregarKanban()" class="bg-indigo-600 text-white px-4 py-1.5 rounded-md text-sm hover:bg-indigo-700 transition">
-            <i class="fa-solid fa-rotate-right mr-1"></i> Atualizar
+          <button onclick="carregarKanban()" class="border border-slate-300 text-slate-600 px-3 py-1.5 rounded-md text-sm hover:bg-slate-100 transition">
+            <i class="fa-solid fa-rotate-right"></i>
           </button>
           <span id="kanban-total" class="text-sm text-slate-500"></span>
         </div>
@@ -455,20 +600,156 @@
       </div>
     </div>
 
-    <!-- ════ MODAL DETALHES DO LEAD ════ -->
-    <div id="lead-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onclick="if(event.target===this)fecharModal()">
-      <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative">
-        <button onclick="fecharModal()" class="absolute top-3 right-4 text-slate-400 hover:text-slate-700 text-xl">&times;</button>
-        <h3 class="text-lg font-bold mb-4 text-slate-800"><i class="fa-solid fa-user-circle text-indigo-500 mr-2"></i><span id="modal-nome"></span></h3>
-        <div class="space-y-3 text-sm">
-          <div class="flex items-center gap-2 text-slate-600">
-            <i class="fa-solid fa-phone w-4"></i>
-            <span id="modal-phone"></span>
+    <!-- ════════════════════════════════════════════════════════
+         TAB: DASHBOARD – INDICADORES DE PERFORMANCE
+    ════════════════════════════════════════════════════════ -->
+    <div id="tab-dashboard-content" class="tab-content hidden">
+      <div class="px-4 py-6 space-y-6 max-w-7xl mx-auto">
+
+        <!-- Header -->
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-bold text-slate-800"><i class="fa-solid fa-chart-line text-indigo-500 mr-2"></i>Indicadores de Performance</h2>
+            <p class="text-sm text-slate-500 mt-0.5">Visão completa da operação comercial</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <select id="dash-board-sel" onchange="carregarDashboard()"
+              class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none">
+            </select>
+            <button onclick="carregarDashboard()"
+              class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition flex items-center gap-1">
+              <i class="fa-solid fa-rotate-right"></i> Atualizar
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div id="dash-kpi" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+
+        <!-- Charts row 1: Campanha + Interesse -->
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div class="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+            <h3 class="text-sm font-semibold text-slate-600 mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-bullhorn text-indigo-400"></i> Leads por Campanha
+            </h3>
+            <div class="relative h-52"><canvas id="chart-campanha"></canvas></div>
+          </div>
+          <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+            <h3 class="text-sm font-semibold text-slate-600 mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-fire text-orange-400"></i> Qualidade dos Leads
+            </h3>
+            <div class="relative h-52"><canvas id="chart-interesse"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Funil de Conversão -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <h3 class="text-sm font-semibold text-slate-600 mb-5 flex items-center gap-2">
+            <i class="fa-solid fa-filter text-indigo-400"></i> Funil de Conversão
+          </h3>
+          <div id="dash-funil" class="space-y-2.5"></div>
+        </div>
+
+        <!-- Chart: Leads por Etapa -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <h3 class="text-sm font-semibold text-slate-600 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-table-columns text-indigo-400"></i> Leads por Etapa do Funil
+          </h3>
+          <div class="relative h-72"><canvas id="chart-etapas"></canvas></div>
+        </div>
+
+        <!-- Reuniões + Resposta cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="dash-reunioes"></div>
+
+        <!-- Performance por Vendedor -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <h3 class="text-sm font-semibold text-slate-600 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-user-tie text-indigo-400"></i> Performance por Vendedor
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-xs font-semibold text-slate-500 border-b border-slate-100">
+                  <th class="text-left py-2 pr-4">Vendedor</th>
+                  <th class="text-right py-2 px-3">Leads</th>
+                  <th class="text-right py-2 px-3">Reuniões</th>
+                  <th class="text-right py-2 px-3">Fechados</th>
+                  <th class="text-right py-2 px-3">Conversão</th>
+                  <th class="py-2 pl-4 pr-2">Barra</th>
+                </tr>
+              </thead>
+              <tbody id="dash-vendedores"></tbody>
+            </table>
+            <p id="dash-vendedores-empty" class="hidden text-sm text-slate-400 text-center py-6">
+              Nenhum lead atribuído a vendedor ainda.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════ MODAL NOVO / EDITAR QUADRO ════ -->
+    <div id="board-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onclick="if(event.target===this)fecharModalQuadro()">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 relative">
+        <button onclick="fecharModalQuadro()" class="absolute top-3 right-4 text-slate-400 hover:text-slate-700 text-xl">&times;</button>
+        <h3 id="board-modal-title" class="text-lg font-bold mb-5 text-slate-800"><i class="fa-solid fa-table-columns text-indigo-500 mr-2"></i>Novo Quadro</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">NOME DO QUADRO</label>
+            <input id="board-modal-nome" type="text"
+              class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+              placeholder="Ex: Pipeline de Pós-Venda">
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-500 mb-1">ETAPA</label>
-            <select id="modal-etapa" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"></select>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">ETAPAS <span class="text-slate-400 font-normal">(uma por linha)</span></label>
+            <textarea id="board-modal-etapas" rows="10"
+              class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-400 outline-none resize-y"
+              placeholder="Novo Lead&#10;Contato Iniciado&#10;Engajado&#10;..."></textarea>
+            <p class="text-xs text-slate-400 mt-1"><i class="fa-solid fa-circle-info mr-1"></i>Cada linha vira uma coluna no quadro. Ordem importa.</p>
           </div>
+        </div>
+        <div class="flex gap-3 mt-5">
+          <button onclick="salvarQuadro()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700 transition">
+            <i class="fa-solid fa-floppy-disk mr-1"></i> Salvar Quadro
+          </button>
+          <button onclick="fecharModalQuadro()" class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ MODAL DETALHES DO LEAD ════ -->
+    <div id="lead-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+         onclick="if(event.target===this)fecharModal()">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg relative flex flex-col" style="max-height:90vh">
+
+        <!-- Cabeçalho fixo -->
+        <div class="px-6 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+          <button onclick="fecharModal()" class="absolute top-3 right-4 text-slate-400 hover:text-slate-700 text-xl">&times;</button>
+          <h3 class="text-lg font-bold text-slate-800 pr-6">
+            <i class="fa-solid fa-user-circle text-indigo-500 mr-2"></i>
+            <span id="modal-nome"></span>
+          </h3>
+          <div class="flex items-center gap-2 text-sm text-slate-500 mt-1">
+            <i class="fa-solid fa-phone w-4 text-xs"></i>
+            <span id="modal-phone"></span>
+          </div>
+        </div>
+
+        <!-- Corpo rolável -->
+        <div class="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+
+          <!-- Etapa -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">ETAPA</label>
+            <select id="modal-etapa"
+              class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+            </select>
+          </div>
+
+          <!-- Status de Interesse -->
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">STATUS DE INTERESSE</label>
             <div class="flex gap-2">
@@ -480,6 +761,8 @@
                 class="flex-1 py-2 rounded-md border text-sm font-semibold transition">🧊 Frio</button>
             </div>
           </div>
+
+          <!-- Vendedor -->
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">VENDEDOR RESPONSÁVEL</label>
             <input id="modal-vendedor" type="text" list="vendedores-list"
@@ -487,15 +770,51 @@
               placeholder="Nome do vendedor">
             <datalist id="vendedores-list"></datalist>
           </div>
-          <div class="pt-1 text-xs text-slate-400">
+
+          <!-- Info -->
+          <div class="text-xs text-slate-400">
             Último disparo: <span id="modal-sent"></span> &nbsp;|&nbsp; Status: <span id="modal-status"></span>
           </div>
-        </div>
-        <div class="flex gap-3 mt-5">
-          <button onclick="salvarModal()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700 transition">
+
+          <!-- ── Histórico de Interações ── -->
+          <div class="border-t border-slate-200 pt-4">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                <i class="fa-solid fa-clock-rotate-left text-indigo-400 mr-1.5"></i>Histórico de Interações
+              </h4>
+              <span id="modal-obs-count" class="text-xs font-medium text-indigo-500"></span>
+            </div>
+
+            <!-- Input nova obs -->
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-200 mb-4">
+              <textarea id="obs-texto" rows="2"
+                placeholder="Registre uma ligação, reunião, mensagem, nota... (Ctrl+Enter para salvar)"
+                class="w-full bg-transparent text-sm text-slate-700 resize-none outline-none placeholder-slate-400"
+                onkeydown="if(event.ctrlKey&&event.key==='Enter')adicionarObs()"></textarea>
+              <div class="flex items-center justify-between mt-2 gap-2">
+                <input id="obs-autor" type="text" placeholder="Autor"
+                  class="text-xs border border-slate-300 rounded px-2 py-1 bg-white focus:ring-1 focus:ring-indigo-300 outline-none flex-1 min-w-0">
+                <button onclick="adicionarObs()" id="btn-add-obs"
+                  class="bg-indigo-600 text-white text-xs px-3 py-1.5 rounded-md hover:bg-indigo-700 transition font-semibold flex items-center gap-1 flex-shrink-0">
+                  <i class="fa-solid fa-plus"></i> Adicionar
+                </button>
+              </div>
+            </div>
+
+            <!-- Timeline -->
+            <div id="obs-timeline" class="space-y-0"></div>
+          </div>
+
+        </div><!-- /corpo -->
+
+        <!-- Rodapé fixo -->
+        <div class="px-6 py-4 border-t border-slate-100 flex gap-3 flex-shrink-0">
+          <button onclick="salvarModal()"
+            class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700 transition">
             <i class="fa-solid fa-floppy-disk mr-1"></i> Salvar
           </button>
-          <button onclick="fecharModal()" class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition">
+          <button onclick="fecharModal()"
+            class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition">
             Cancelar
           </button>
         </div>
@@ -507,6 +826,142 @@
     ════════════════════════════════════════════════════════ -->
     <script>
         const API_BASE = "http://127.0.0.1:8000";
+
+        // ══════════════════════════════════════════
+        // AUTH — Login / Logout / Fetch interceptor
+        // ══════════════════════════════════════════
+
+        // Override global fetch para injetar token e capturar 401
+        const _origFetch = window.fetch.bind(window);
+        window.fetch = async (url, opts = {}) => {
+            if (typeof url === 'string' && url.startsWith(API_BASE)) {
+                const token = localStorage.getItem('auth_token');
+                if (token) {
+                    opts = {
+                        ...opts,
+                        headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) },
+                    };
+                }
+            }
+            const res = await _origFetch(url, opts);
+            if (res.status === 401 && typeof url === 'string' && url.startsWith(API_BASE)
+                && !url.includes('/auth/login')) {
+                localStorage.removeItem('auth_token');
+                mostrarLogin('Sessão expirada. Faça login novamente.');
+                throw new Error('Sessão expirada');
+            }
+            return res;
+        };
+
+        function mostrarLogin(msg = '') {
+            document.getElementById('login-screen').classList.remove('hidden');
+            const err = document.getElementById('login-error');
+            if (msg) { err.textContent = msg; err.classList.remove('hidden'); }
+            else { err.classList.add('hidden'); }
+            document.getElementById('login-email').value = '';
+            document.getElementById('login-senha').value = '';
+            document.getElementById('navbar-user').classList.add('hidden');
+            document.getElementById('btn-logout').classList.add('hidden');
+        }
+
+        function ocultarLogin(nome) {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('navbar-user-nome').textContent = nome;
+            document.getElementById('navbar-user').classList.remove('hidden');
+            document.getElementById('btn-logout').classList.remove('hidden');
+        }
+
+        function toggleSenhaVisivel() {
+            const inp = document.getElementById('login-senha');
+            const ico = document.getElementById('login-eye');
+            if (inp.type === 'password') {
+                inp.type = 'text';
+                ico.className = 'fa-solid fa-eye-slash text-sm';
+            } else {
+                inp.type = 'password';
+                ico.className = 'fa-solid fa-eye text-sm';
+            }
+        }
+
+        async function fazerLogin() {
+            const email = document.getElementById('login-email').value.trim();
+            const senha = document.getElementById('login-senha').value;
+            const err   = document.getElementById('login-error');
+            const btn   = document.getElementById('btn-login');
+
+            if (!email || !senha) {
+                err.textContent = 'Preencha email e senha.';
+                err.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Entrando...';
+
+            try {
+                const res = await _origFetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, senha }),
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    err.textContent = data.detail || 'Email ou senha incorretos.';
+                    err.classList.remove('hidden');
+                    return;
+                }
+                const data = await res.json();
+                localStorage.setItem('auth_token', data.token);
+                localStorage.setItem('auth_nome', data.nome);
+                ocultarLogin(data.nome);
+                inicializarApp();
+            } catch (e) {
+                err.textContent = 'Erro de conexão com o servidor.';
+                err.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Entrar';
+            }
+        }
+
+        function fazerLogout() {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_nome');
+            mostrarLogin();
+        }
+
+        async function verificarSessao() {
+            const token = localStorage.getItem('auth_token');
+            const nome  = localStorage.getItem('auth_nome');
+            if (!token) { mostrarLogin(); return; }
+
+            // Se tiver token, mostra o app imediatamente (não bloqueia na tela de login)
+            ocultarLogin(nome || 'Usuário');
+            inicializarApp();
+
+            // Valida o token em background — só desloga se o servidor confirmar 401
+            try {
+                const res = await _origFetch(`${API_BASE}/auth/me`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (res.status === 401) {
+                    localStorage.removeItem('auth_token');
+                    localStorage.removeItem('auth_nome');
+                    mostrarLogin('Sessão expirada. Faça login novamente.');
+                }
+                // qualquer outro status (200, 500, erro de rede) → mantém logado
+            } catch (e) {
+                // servidor indisponível no momento — mantém sessão local intacta
+            }
+        }
+
+        function inicializarApp() {
+            checarStatus();
+            carregarTemplates();
+            carregarLeads();
+            carregarMensagens();
+            setInterval(checarStatus, 30000);
+        }
 
         // ──────────────────────────────────────────
         // TAB NAVIGATION
@@ -525,7 +980,8 @@
             if (name === 'meetings') { carregarReunioes(); carregarConversas(); }
             if (name === 'team') { carregarParticipantes(); }
             if (name === 'settings') { carregarConfiguracoes(); verificarGoogle(); }
-            if (name === 'funil') { carregarKanban(); }
+            if (name === 'funil') { carregarBoards().then(() => carregarKanban()); }
+            if (name === 'dashboard') { _dashPopularBoards().then(() => carregarDashboard()); }
         }
 
         // ──────────────────────────────────────────
@@ -850,7 +1306,23 @@
                 document.getElementById('cfg-gemini-key').value       = s.gemini_api_key || '';
                 document.getElementById('cfg-bot-persona').value      = s.bot_persona    || '';
                 document.getElementById('cfg-times').value             = (s.available_times || []).join('\n');
+                // Facebook Lead Ads
+                document.getElementById('cfg-fb-verify-token').value = s.fb_verify_token      || '';
+                document.getElementById('cfg-fb-page-token').value   = s.fb_page_access_token || '';
+                document.getElementById('cfg-fb-app-secret').value   = s.fb_app_secret        || '';
+                const base = (s.webhook_base_url || '').replace(/\/$/, '');
+                document.getElementById('fb-webhook-url-display').textContent = base ? `${base}/webhook/facebook` : '— salve a URL Base do Webhook primeiro —';
             } catch (e) { console.error("Erro ao carregar configurações:", e); }
+        }
+
+        function copiarFbWebhookUrl() {
+            const url = document.getElementById('fb-webhook-url-display').textContent.trim();
+            if (!url || url.startsWith('—')) return;
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = event.currentTarget;
+                btn.innerHTML = '<i class="fa-solid fa-check text-green-500"></i>';
+                setTimeout(() => btn.innerHTML = '<i class="fa-regular fa-copy"></i>', 1500);
+            });
         }
 
         async function salvarConfiguracoes() {
@@ -869,6 +1341,10 @@
                 gemini_api_key:         document.getElementById('cfg-gemini-key').value.trim(),
                 bot_persona:            document.getElementById('cfg-bot-persona').value.trim(),
                 available_times:        times,
+                // Facebook Lead Ads
+                fb_verify_token:      document.getElementById('cfg-fb-verify-token').value.trim(),
+                fb_page_access_token: document.getElementById('cfg-fb-page-token').value.trim(),
+                fb_app_secret:        document.getElementById('cfg-fb-app-secret').value.trim(),
             };
 
             try {
@@ -1011,13 +1487,200 @@
             carregarParticipantes();
         }
 
+        // ══════════════════════════════════════════
+        // DASHBOARD — Indicadores de Performance
+        // ══════════════════════════════════════════
+
+        let _dashCharts  = {};
+        let _dashBoardId = 1;
+
+        async function _dashPopularBoards() {
+            try {
+                const res  = await fetch(`${API_BASE}/kanban/boards`);
+                const list = await res.json();
+                const sel  = document.getElementById('dash-board-sel');
+                sel.innerHTML = list.map(b =>
+                    `<option value="${b.id}"${b.id === _dashBoardId ? ' selected' : ''}>${b.nome}</option>`
+                ).join('');
+            } catch(e) { console.error('[dash] boards', e); }
+        }
+
+        async function carregarDashboard() {
+            const sel = document.getElementById('dash-board-sel');
+            if (sel) _dashBoardId = parseInt(sel.value) || 1;
+            try {
+                const res  = await fetch(`${API_BASE}/dashboard/stats?board_id=${_dashBoardId}`);
+                const data = await res.json();
+                _renderDashKPI(data.resumo, data.reunioes);
+                _renderDashFunil(data.funil);
+                _renderDashReunioesCards(data.reunioes, data.resumo);
+                _renderDashCharts(data);
+                _renderDashVendedores(data.por_vendedor);
+            } catch(e) { console.error('[dash]', e); }
+        }
+
+        function _destroyCharts() {
+            Object.values(_dashCharts).forEach(c => { try { c.destroy(); } catch(_) {} });
+            _dashCharts = {};
+        }
+
+        // ── KPI Cards ────────────────────────────────────────
+        function _renderDashKPI(r, mt) {
+            const cards = [
+                { label: 'Leads Totais',    valor: r.total_leads,       sub: `+${r.leads_hoje} hoje`,   icon: 'fa-users',         cor: 'indigo' },
+                { label: 'Esta Semana',     valor: r.leads_semana,       sub: `+${r.leads_mes} no mês`,  icon: 'fa-calendar-week', cor: 'blue'   },
+                { label: 'Responderam',     valor: r.responderam,        sub: `${r.pct_resposta}% da base`, icon: 'fa-reply',      cor: 'green'  },
+                { label: 'Reuniões Conf.',  valor: mt.confirmadas,       sub: `de ${mt.total} agend.`,   icon: 'fa-calendar-check',cor: 'violet' },
+                { label: 'Follow-ups',      valor: r.followups_enviados, sub: 'reativações enviadas',    icon: 'fa-paper-plane',   cor: 'orange' },
+                { label: 'Msgs/Lead',       valor: r.media_msgs_por_lead,sub: 'média de mensagens',      icon: 'fa-comments',      cor: 'pink'   },
+            ];
+            const paleta = {
+                indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                blue:   'bg-blue-50 text-blue-700 border-blue-200',
+                green:  'bg-emerald-50 text-emerald-700 border-emerald-200',
+                violet: 'bg-violet-50 text-violet-700 border-violet-200',
+                orange: 'bg-orange-50 text-orange-700 border-orange-200',
+                pink:   'bg-pink-50 text-pink-700 border-pink-200',
+            };
+            document.getElementById('dash-kpi').innerHTML = cards.map(c => `
+              <div class="rounded-xl border p-4 ${paleta[c.cor]}">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="text-xs font-semibold uppercase tracking-wide opacity-70">${c.label}</span>
+                  <i class="fa-solid ${c.icon} opacity-40 text-base"></i>
+                </div>
+                <div class="text-3xl font-bold">${c.valor}</div>
+                <div class="text-xs mt-1 opacity-60">${c.sub}</div>
+              </div>`).join('');
+        }
+
+        // ── Funil de Conversão ────────────────────────────────
+        function _renderDashFunil(funil) {
+            const cores = ['bg-indigo-500','bg-blue-500','bg-violet-500','bg-purple-500','bg-fuchsia-500','bg-emerald-500'];
+            document.getElementById('dash-funil').innerHTML = funil.map((step, i) => `
+              <div class="flex items-center gap-3">
+                <div class="w-36 text-xs font-semibold text-slate-600 text-right shrink-0 truncate" title="${step.label}">${step.label}</div>
+                <div class="flex-1 bg-slate-100 rounded-full h-6 overflow-hidden relative">
+                  <div class="${cores[i] || 'bg-slate-400'} h-full rounded-full transition-all duration-500" style="width:${step.pct}%"></div>
+                  <span class="absolute inset-0 flex items-center pl-3 text-xs font-bold text-white mix-blend-luminosity">${step.valor} leads</span>
+                </div>
+                <div class="w-12 text-right text-xs font-bold text-slate-600 shrink-0">${step.pct}%</div>
+              </div>`).join('');
+        }
+
+        // ── Cards de Reuniões + Resposta ─────────────────────
+        function _renderDashReunioesCards(mt, r) {
+            const itens = [
+                { label: 'Reuniões Agend.',    valor: mt.total,            icon: 'fa-calendar-plus',  cor: 'bg-violet-50 border-violet-200 text-violet-700' },
+                { label: 'Reuniões Confirm.',  valor: mt.confirmadas,      icon: 'fa-calendar-check', cor: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+                { label: 'Taxa Comparec.',     valor: `${mt.taxa_comparecimento}%`, icon: 'fa-percent', cor: 'bg-blue-50 border-blue-200 text-blue-700' },
+                { label: '% Resposta',         valor: `${r.pct_resposta}%`,icon: 'fa-reply-all',      cor: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
+            ];
+            document.getElementById('dash-reunioes').innerHTML = itens.map(c => `
+              <div class="rounded-xl border p-4 ${c.cor} flex items-center gap-4">
+                <i class="fa-solid ${c.icon} text-2xl opacity-50"></i>
+                <div>
+                  <div class="text-2xl font-bold">${c.valor}</div>
+                  <div class="text-xs font-semibold uppercase tracking-wide opacity-70">${c.label}</div>
+                </div>
+              </div>`).join('');
+        }
+
+        // ── Charts ────────────────────────────────────────────
+        function _renderDashCharts(data) {
+            _destroyCharts();
+
+            // Chart: Leads por Campanha
+            const ctxCamp = document.getElementById('chart-campanha')?.getContext('2d');
+            if (ctxCamp && data.por_campanha?.length) {
+                _dashCharts.campanha = new Chart(ctxCamp, {
+                    type: 'bar',
+                    data: {
+                        labels: data.por_campanha.map(c => c.campanha),
+                        datasets: [{ label: 'Leads', data: data.por_campanha.map(c => c.total),
+                            backgroundColor: '#6366f1', borderRadius: 6 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { grid: { display: false } } } }
+                });
+            }
+
+            // Chart: Interesse (doughnut)
+            const ctxInt = document.getElementById('chart-interesse')?.getContext('2d');
+            const int = data.por_interesse;
+            if (ctxInt) {
+                _dashCharts.interesse = new Chart(ctxInt, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Quente 🔥', 'Morno 🌡️', 'Frio 🧊', 'Sem classif.'],
+                        datasets: [{ data: [int.quente, int.morno, int.frio, int.sem_classificacao],
+                            backgroundColor: ['#ef4444','#f97316','#3b82f6','#94a3b8'],
+                            borderWidth: 2 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, cutout: '65%',
+                        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
+                });
+            }
+
+            // Chart: Leads por Etapa (horizontal bar)
+            const ctxEtapa = document.getElementById('chart-etapas')?.getContext('2d');
+            if (ctxEtapa && data.por_etapa) {
+                const etapaLabels = Object.keys(data.por_etapa);
+                const etapaVals   = Object.values(data.por_etapa);
+                const gradient = etapaLabels.map((_, i) => {
+                    const hue = Math.round(240 - (i / Math.max(etapaLabels.length - 1, 1)) * 120);
+                    return `hsl(${hue},70%,55%)`;
+                });
+                _dashCharts.etapas = new Chart(ctxEtapa, {
+                    type: 'bar',
+                    data: {
+                        labels: etapaLabels,
+                        datasets: [{ label: 'Leads', data: etapaVals,
+                            backgroundColor: gradient, borderRadius: 5 }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } }, y: { grid: { display: false } } }
+                    }
+                });
+            }
+        }
+
+        // ── Tabela de Vendedores ──────────────────────────────
+        function _renderDashVendedores(list) {
+            const tbody = document.getElementById('dash-vendedores');
+            const empty = document.getElementById('dash-vendedores-empty');
+            if (!list || list.length === 0) {
+                tbody.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+            const maxPct = Math.max(...list.map(v => v.pct_conversao), 1);
+            tbody.innerHTML = list.map((v, i) => `
+              <tr class="border-b border-slate-50 hover:bg-slate-50 transition">
+                <td class="py-3 pr-4 font-semibold text-slate-700 flex items-center gap-2">
+                  <span class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">${i+1}</span>
+                  ${v.vendedor}
+                </td>
+                <td class="text-right py-3 px-3 text-slate-600">${v.leads}</td>
+                <td class="text-right py-3 px-3 text-slate-600">${v.reunioes}</td>
+                <td class="text-right py-3 px-3 font-bold text-emerald-600">${v.fechados}</td>
+                <td class="text-right py-3 px-3 font-semibold text-indigo-600">${v.pct_conversao}%</td>
+                <td class="py-3 pl-4 pr-2 w-32">
+                  <div class="bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div class="bg-indigo-500 h-full rounded-full" style="width:${Math.round(v.pct_conversao/maxPct*100)}%"></div>
+                  </div>
+                </td>
+              </tr>`).join('');
+        }
+
         // ──────────────────────────────────────────
-        // INIT
+        // INIT — verifica sessão antes de tudo
         // ──────────────────────────────────────────
-        checarStatus();
-        carregarLeads();
-        carregarMensagens();
-        setInterval(checarStatus, 30000);
+        verificarSessao();
 
         // ══════════════════════════════════════════
         // 9. FUNIL CRM (KANBAN)
@@ -1048,14 +1711,103 @@
         let _kanbanData = null;
         let _modalLeadId = null;
         let _modalInteresse = '';
+        let _currentBoardId = 1;
+        let _allBoards = [];
+        let _editingBoardId = null;
+
+        async function carregarBoards() {
+            try {
+                const res = await fetch(`${API_BASE}/kanban/boards`);
+                _allBoards = await res.json();
+                const sel = document.getElementById('kanban-board-sel');
+                sel.innerHTML = _allBoards.map(b =>
+                    `<option value="${b.id}"${b.id===_currentBoardId?' selected':''}>${b.nome}</option>`
+                ).join('');
+                const delBtn = document.getElementById('btn-deletar-quadro');
+                if (delBtn) delBtn.classList.toggle('hidden', _currentBoardId === 1);
+            } catch(e) { console.error('[boards]', e); }
+        }
 
         async function carregarKanban() {
             try {
-                const res = await fetch(`${API_BASE}/leads/kanban`);
+                const res = await fetch(`${API_BASE}/leads/kanban?board_id=${_currentBoardId}`);
                 _kanbanData = await res.json();
                 _popularFiltroVendedor(_kanbanData);
                 renderKanban();
             } catch(e) { console.error('[kanban]', e); }
+        }
+
+        async function trocarQuadro() {
+            const sel = document.getElementById('kanban-board-sel');
+            _currentBoardId = parseInt(sel.value) || 1;
+            const delBtn = document.getElementById('btn-deletar-quadro');
+            if (delBtn) delBtn.classList.toggle('hidden', _currentBoardId === 1);
+            await carregarKanban();
+        }
+
+        function abrirModalNovoQuadro() {
+            _editingBoardId = null;
+            document.getElementById('board-modal-title').innerHTML =
+                '<i class="fa-solid fa-table-columns text-indigo-500 mr-2"></i>Novo Quadro';
+            document.getElementById('board-modal-nome').value = '';
+            document.getElementById('board-modal-etapas').value =
+                'Novo Lead\nContato Iniciado\nEngajado\nProposta Enviada\nNegociação\nFechado\nPerdido';
+            document.getElementById('board-modal').classList.remove('hidden');
+        }
+
+        function abrirModalEditarQuadro() {
+            const board = _allBoards.find(b => b.id === _currentBoardId);
+            if (!board) return;
+            _editingBoardId = board.id;
+            document.getElementById('board-modal-title').innerHTML =
+                '<i class="fa-solid fa-pen-to-square text-indigo-500 mr-2"></i>Editar Quadro';
+            document.getElementById('board-modal-nome').value = board.nome;
+            let etapas = [];
+            try { etapas = JSON.parse(board.etapas); } catch(e) {}
+            document.getElementById('board-modal-etapas').value = etapas.join('\n');
+            document.getElementById('board-modal').classList.remove('hidden');
+        }
+
+        function fecharModalQuadro() {
+            document.getElementById('board-modal').classList.add('hidden');
+            _editingBoardId = null;
+        }
+
+        async function salvarQuadro() {
+            const nome = document.getElementById('board-modal-nome').value.trim();
+            const etapasRaw = document.getElementById('board-modal-etapas').value;
+            const etapas = etapasRaw.split('\n').map(s => s.trim()).filter(Boolean);
+            if (!nome) { alert('Informe o nome do quadro.'); return; }
+            if (etapas.length === 0) { alert('Adicione ao menos uma etapa.'); return; }
+
+            const body = JSON.stringify({ nome, etapas });
+            const method = _editingBoardId ? 'PUT' : 'POST';
+            const url = _editingBoardId
+                ? `${API_BASE}/kanban/boards/${_editingBoardId}`
+                : `${API_BASE}/kanban/boards`;
+
+            const res = await fetch(url, {
+                method,
+                headers: {'Content-Type':'application/json'},
+                body
+            });
+            if (!res.ok) { alert('Erro ao salvar quadro.'); return; }
+            const saved = await res.json();
+            if (!_editingBoardId) _currentBoardId = saved.id;
+            fecharModalQuadro();
+            await carregarBoards();
+            await carregarKanban();
+        }
+
+        async function deletarQuadro() {
+            if (_currentBoardId === 1) { alert('O quadro padrão não pode ser excluído.'); return; }
+            const board = _allBoards.find(b => b.id === _currentBoardId);
+            if (!confirm(`Excluir o quadro "${board?.nome}"? Os leads serão movidos para o quadro padrão.`)) return;
+            const res = await fetch(`${API_BASE}/kanban/boards/${_currentBoardId}`, { method: 'DELETE' });
+            if (!res.ok) { alert('Erro ao excluir quadro.'); return; }
+            _currentBoardId = 1;
+            await carregarBoards();
+            await carregarKanban();
         }
 
         function _popularFiltroVendedor(data) {
@@ -1115,8 +1867,11 @@
         }
 
         function _cardHTML(lead) {
-            const badge = INTERESSE_BADGE[lead.status_interesse] || '';
-            const vend  = lead.vendedor ? `<div class="text-xs text-slate-400 truncate"><i class="fa-solid fa-user-tie mr-1"></i>${lead.vendedor}</div>` : '';
+            const badge   = INTERESSE_BADGE[lead.status_interesse] || '';
+            const vend    = lead.vendedor ? `<div class="text-xs text-slate-400 truncate"><i class="fa-solid fa-user-tie mr-1"></i>${lead.vendedor}</div>` : '';
+            const obsBadge = lead.obs_count > 0
+                ? `<div class="text-xs text-indigo-400 font-medium"><i class="fa-regular fa-comment-dots mr-1"></i>${lead.obs_count}</div>`
+                : '';
             return `<div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing hover:shadow-md transition"
                         draggable="true"
                         ondragstart="event.dataTransfer.setData('leadId','${lead.id}');event.dataTransfer.setData('fromEtapa',\`${lead.etapa}\`)"
@@ -1124,7 +1879,10 @@
                 <div class="font-semibold text-sm text-slate-800 truncate mb-1">${lead.name || '(sem nome)'}</div>
                 <div class="text-xs text-slate-500 mb-1.5"><i class="fa-solid fa-phone mr-1"></i>${lead.phone}</div>
                 ${badge ? `<div class="mb-1">${badge}</div>` : ''}
-                ${vend}
+                <div class="flex items-center justify-between gap-2">
+                  ${vend}
+                  ${obsBadge}
+                </div>
               </div>`;
         }
 
@@ -1162,8 +1920,14 @@
             Object.values(_kanbanData?.board || {}).flat().forEach(l => { if(l.vendedor) vendedores.add(l.vendedor); });
             dl.innerHTML = [...vendedores].map(v=>`<option value="${v}">`).join('');
 
+            // Prepara área de obs
+            document.getElementById('obs-texto').value = '';
+            document.getElementById('obs-autor').value = localStorage.getItem('auth_nome') || '';
+            document.getElementById('obs-timeline').innerHTML = '<p class="text-xs text-slate-400 text-center py-2">Carregando...</p>';
+
             _atualizarBotoesInteresse();
             document.getElementById('lead-modal').classList.remove('hidden');
+            carregarObs();
         }
 
         function fecharModal() {
@@ -1203,6 +1967,82 @@
             });
             fecharModal();
             await carregarKanban();
+        }
+
+        // ──────────────────────────────────────────
+        // OBSERVAÇÕES / HISTÓRICO DE INTERAÇÕES
+        // ──────────────────────────────────────────
+        function _fmtObsDate(iso) {
+            const d = new Date(iso);
+            return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function carregarObs() {
+            if (!_modalLeadId) return;
+            try {
+                const res  = await fetch(`${API_BASE}/leads/${_modalLeadId}/obs`);
+                const list = await res.json();
+                const countEl   = document.getElementById('modal-obs-count');
+                const timeline  = document.getElementById('obs-timeline');
+                countEl.textContent = list.length ? `${list.length} registro${list.length > 1 ? 's' : ''}` : '';
+                if (list.length === 0) {
+                    timeline.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Nenhuma interação registrada ainda.</p>';
+                    return;
+                }
+                timeline.innerHTML = list.map((o, i) => {
+                    const isLast = i === list.length - 1;
+                    const textoEsc = o.texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                    return `<div class="flex gap-3 group" data-obs-id="${o.id}">
+                        <div class="flex flex-col items-center flex-shrink-0 pt-1">
+                            <div class="w-2.5 h-2.5 rounded-full bg-indigo-400 ring-2 ring-white"></div>
+                            ${!isLast ? '<div class="w-px flex-1 bg-slate-200 mt-1 mb-1"></div>' : ''}
+                        </div>
+                        <div class="flex-1 pb-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <span class="text-xs font-semibold text-slate-700">${o.autor || 'Anônimo'}</span>
+                                    <span class="text-xs text-slate-400 ml-2">${_fmtObsDate(o.created_at)}</span>
+                                </div>
+                                <button onclick="deletarObs(${o.id})"
+                                    class="text-slate-300 hover:text-red-400 transition text-xs opacity-0 group-hover:opacity-100 flex-shrink-0 mt-0.5"
+                                    title="Remover">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                            <p class="text-sm text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">${textoEsc}</p>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch(e) { console.error('[obs]', e); }
+        }
+
+        async function adicionarObs() {
+            if (!_modalLeadId) return;
+            const texto = document.getElementById('obs-texto').value.trim();
+            if (!texto) { document.getElementById('obs-texto').focus(); return; }
+            const autor = document.getElementById('obs-autor').value.trim() || localStorage.getItem('auth_nome') || '';
+            const btn = document.getElementById('btn-add-obs');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            try {
+                await fetch(`${API_BASE}/leads/${_modalLeadId}/obs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ texto, autor }),
+                });
+                document.getElementById('obs-texto').value = '';
+                await carregarObs();
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-plus"></i> Adicionar';
+            }
+        }
+
+        async function deletarObs(obsId) {
+            if (!confirm('Remover esta observação?')) return;
+            await fetch(`${API_BASE}/leads/${_modalLeadId}/obs/${obsId}`, { method: 'DELETE' });
+            await carregarObs();
         }
     </script>
 </body>

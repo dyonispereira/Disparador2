@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from io import StringIO
 import csv
@@ -12,6 +13,7 @@ from datetime import datetime
 
 import models
 import schemas
+import auth
 from db import SessionLocal, engine
 
 # =========================
@@ -32,6 +34,14 @@ def _run_migrations():
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS etapa VARCHAR DEFAULT 'Novo Lead'",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS status_interesse VARCHAR",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS vendedor VARCHAR",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS board_id INTEGER",
+            """CREATE TABLE IF NOT EXISTS lead_obs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lead_id INTEGER NOT NULL REFERENCES leads(id),
+                texto TEXT NOT NULL,
+                autor TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )""",
         ]:
             try:
                 conn.execute(text(sql))
@@ -41,6 +51,51 @@ def _run_migrations():
 
 
 _run_migrations()
+
+
+def _seed_admin():
+    """Cria o usuário admin padrão se não existir nenhum usuário."""
+    db = SessionLocal()
+    try:
+        if db.query(models.Usuario).count() == 0:
+            db.add(models.Usuario(
+                nome="Administrador",
+                email="admin@gestorpec.com.br",
+                senha_hash=auth.hash_password("admin123"),
+                ativo=True,
+            ))
+            db.commit()
+            print("[auth] Usuário admin criado: admin@gestorpec.com.br / admin123")
+    finally:
+        db.close()
+
+
+_seed_admin()
+
+
+_ETAPAS_DEFAULT = [
+    "Novo Lead", "Contato Iniciado", "Engajado", "Ligação Realizada",
+    "Apresentação Agendada", "Apresentação Realizada", "Proposta",
+    "Negociação", "Fechado", "Grupo Criado", "Aguardando Pagamento",
+    "Implantação Agendada", "Em Implantação", "Entrega Técnica",
+]
+
+
+def _seed_default_board():
+    """Cria o quadro padrão (id=1) se ainda não existir."""
+    import json as _json
+    db = SessionLocal()
+    try:
+        if not db.query(models.KanbanBoard).filter(models.KanbanBoard.id == 1).first():
+            db.add(models.KanbanBoard(id=1, nome="Pipeline de Vendas",
+                                      etapas=_json.dumps(_ETAPAS_DEFAULT)))
+            db.commit()
+    finally:
+        db.close()
+
+
+_seed_default_board()
+
 
 async def _reminder_loop():
     from config import load_settings
@@ -79,6 +134,26 @@ async def _reminder_loop():
 
 app = FastAPI()
 
+# Rotas públicas — não exigem token
+_PUBLIC = {"/", "/auth/login"}
+_PUBLIC_PREFIX = "/webhook"
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    path = request.url.path
+    if path in _PUBLIC or path.startswith(_PUBLIC_PREFIX):
+        return await call_next(request)
+
+    header = request.headers.get("Authorization", "")
+    token = header[7:] if header.startswith("Bearer ") else ""
+    if not token or not auth.decode_token(token):
+        return JSONResponse({"detail": "Não autenticado"}, status_code=401)
+
+    return await call_next(request)
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -87,7 +162,7 @@ async def startup_event():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Permite requisições de qualquer origem (inclusive arquivos locais)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,15 +172,271 @@ EVOLUTION_URL = "http://127.0.0.1:8080"
 API_KEY = "ev_api_123456_mt_local"
 INSTANCE = "minha_instancia"
 
-# =========================
-# DB
-# =========================
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+
+# =========================
+# AUTH
+# =========================
+@app.post("/auth/login", response_model=schemas.TokenResponse)
+def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(models.Usuario).filter(
+        models.Usuario.email == body.email,
+        models.Usuario.ativo == True,
+    ).first()
+    if not user or not auth.verify_password(body.senha, user.senha_hash):
+        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+    return schemas.TokenResponse(
+        token=auth.create_token(user.email),
+        nome=user.nome,
+        email=user.email,
+    )
+
+
+@app.get("/auth/me", response_model=schemas.UsuarioResponse)
+def me(request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("Authorization", "")[7:]
+    email = auth.decode_token(token)
+    user = db.query(models.Usuario).filter(models.Usuario.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    return user
+
+
+@app.get("/auth/usuarios", response_model=list[schemas.UsuarioResponse])
+def listar_usuarios(db: Session = Depends(get_db)):
+    return db.query(models.Usuario).order_by(models.Usuario.id).all()
+
+
+@app.post("/auth/usuarios", response_model=schemas.UsuarioResponse)
+def criar_usuario(body: schemas.UsuarioCreate, db: Session = Depends(get_db)):
+    if db.query(models.Usuario).filter(models.Usuario.email == body.email).first():
+        raise HTTPException(status_code=400, detail="Email já cadastrado")
+    user = models.Usuario(
+        nome=body.nome,
+        email=body.email,
+        senha_hash=auth.hash_password(body.senha),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@app.delete("/auth/usuarios/{uid}")
+def deletar_usuario(uid: int, request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("Authorization", "")[7:]
+    email = auth.decode_token(token)
+    user = db.query(models.Usuario).filter(models.Usuario.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if user.email == email:
+        raise HTTPException(status_code=400, detail="Não é possível excluir o próprio usuário")
+    db.delete(user)
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/auth/trocar-senha")
+def trocar_senha(body: schemas.SenhaUpdate, request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("Authorization", "")[7:]
+    email = auth.decode_token(token)
+    user = db.query(models.Usuario).filter(models.Usuario.email == email).first()
+    if not user or not auth.verify_password(body.senha_atual, user.senha_hash):
+        raise HTTPException(status_code=401, detail="Senha atual incorreta")
+    user.senha_hash = auth.hash_password(body.nova_senha)
+    db.commit()
+    return {"ok": True}
+
+
+# =========================
+# DASHBOARD – Indicadores de Performance
+# =========================
+@app.get("/dashboard/stats")
+def get_dashboard_stats(board_id: int = 1, db: Session = Depends(get_db)):
+    import json as _json
+    from sqlalchemy import func, or_
+    from datetime import date, timedelta
+
+    today_date = datetime.utcnow().date()
+    week_ago   = datetime.utcnow() - timedelta(days=7)
+    month_ago  = datetime.utcnow() - timedelta(days=30)
+
+    # ── Totais de leads ─────────────────────────────────────────
+    total       = db.query(func.count(models.Lead.id)).scalar() or 0
+    leads_hoje  = db.query(func.count(models.Lead.id)).filter(
+        func.date(models.Lead.created_at) == today_date
+    ).scalar() or 0
+    leads_semana = db.query(func.count(models.Lead.id)).filter(
+        models.Lead.created_at >= week_ago
+    ).scalar() or 0
+    leads_mes = db.query(func.count(models.Lead.id)).filter(
+        models.Lead.created_at >= month_ago
+    ).scalar() or 0
+
+    # ── Leads que responderam (têm ConversationState) ───────────
+    phones_conv = db.query(models.ConversationState.phone)
+    responderam = db.query(func.count(models.Lead.id)).filter(
+        models.Lead.phone.in_(phones_conv)
+    ).scalar() or 0
+    pct_resposta = round(responderam / total * 100, 1) if total else 0
+
+    # ── Por campanha (top 10) ───────────────────────────────────
+    por_campanha_q = (
+        db.query(models.Lead.campaign_name, func.count(models.Lead.id).label("total"))
+        .group_by(models.Lead.campaign_name)
+        .order_by(func.count(models.Lead.id).desc())
+        .limit(10)
+        .all()
+    )
+    por_campanha = [
+        {"campanha": row.campaign_name or "(sem campanha)", "total": row.total}
+        for row in por_campanha_q
+    ]
+
+    # ── Por etapa (board específico) ────────────────────────────
+    board = db.query(models.KanbanBoard).filter(models.KanbanBoard.id == board_id).first()
+    etapas = _json.loads(board.etapas) if board else []
+    por_etapa: dict = {e: 0 for e in etapas}
+
+    filtro_board = (
+        or_(models.Lead.board_id == board_id, models.Lead.board_id.is_(None))
+        if board_id == 1
+        else models.Lead.board_id == board_id
+    )
+    por_etapa_q = (
+        db.query(models.Lead.etapa, func.count(models.Lead.id).label("total"))
+        .filter(filtro_board)
+        .group_by(models.Lead.etapa)
+        .all()
+    )
+    for row in por_etapa_q:
+        key = row.etapa or etapas[0] if etapas else "Novo Lead"
+        if key in por_etapa:
+            por_etapa[key] = row.total
+
+    # ── Por status de interesse ─────────────────────────────────
+    por_interesse: dict = {"quente": 0, "morno": 0, "frio": 0, "sem_classificacao": 0}
+    for row in db.query(models.Lead.status_interesse, func.count(models.Lead.id).label("total")) \
+                 .group_by(models.Lead.status_interesse).all():
+        k = row.status_interesse or "sem_classificacao"
+        if k in por_interesse:
+            por_interesse[k] = row.total
+        else:
+            por_interesse["sem_classificacao"] += row.total
+
+    # ── Performance por vendedor ────────────────────────────────
+    por_vendedor_q = (
+        db.query(models.Lead.vendedor, func.count(models.Lead.id).label("leads"))
+        .filter(models.Lead.vendedor.isnot(None))
+        .group_by(models.Lead.vendedor)
+        .all()
+    )
+    por_vendedor = []
+    for row in por_vendedor_q:
+        fechados = db.query(func.count(models.Lead.id)).filter(
+            models.Lead.vendedor == row.vendedor,
+            models.Lead.etapa.in_(["Fechado", "Grupo Criado", "Aguardando Pagamento",
+                                   "Implantação Agendada", "Em Implantação", "Entrega Técnica"]),
+        ).scalar() or 0
+        reunioes = db.query(func.count(models.ScheduledMeeting.id)).filter(
+            models.ScheduledMeeting.lead_phone.in_(
+                db.query(models.Lead.phone).filter(models.Lead.vendedor == row.vendedor)
+            )
+        ).scalar() or 0
+        por_vendedor.append({
+            "vendedor": row.vendedor,
+            "leads": row.leads,
+            "reunioes": reunioes,
+            "fechados": fechados,
+            "pct_conversao": round(fechados / row.leads * 100, 1) if row.leads else 0,
+        })
+    por_vendedor.sort(key=lambda x: x["fechados"], reverse=True)
+
+    # ── Reuniões ────────────────────────────────────────────────
+    total_reunioes  = db.query(func.count(models.ScheduledMeeting.id)).scalar() or 0
+    confirmadas     = db.query(func.count(models.ScheduledMeeting.id)).filter(
+        models.ScheduledMeeting.status == "confirmado"
+    ).scalar() or 0
+    canceladas      = db.query(func.count(models.ScheduledMeeting.id)).filter(
+        models.ScheduledMeeting.status == "cancelado"
+    ).scalar() or 0
+    taxa_comp = round(confirmadas / total_reunioes * 100, 1) if total_reunioes else 0
+
+    # ── Funil de conversão ──────────────────────────────────────
+    def _count(*etapas_list):
+        return db.query(func.count(models.Lead.id)).filter(
+            models.Lead.etapa.in_(etapas_list)
+        ).scalar() or 0
+
+    ETAPAS_POS_CONTATO   = ["Contato Iniciado","Engajado","Ligação Realizada","Apresentação Agendada",
+                             "Apresentação Realizada","Proposta","Negociação","Fechado","Grupo Criado",
+                             "Aguardando Pagamento","Implantação Agendada","Em Implantação","Entrega Técnica"]
+    ETAPAS_POS_LIGACAO   = ["Ligação Realizada","Apresentação Agendada","Apresentação Realizada",
+                             "Proposta","Negociação","Fechado","Grupo Criado","Aguardando Pagamento",
+                             "Implantação Agendada","Em Implantação","Entrega Técnica"]
+    ETAPAS_POS_APRES     = ["Apresentação Agendada","Apresentação Realizada","Proposta","Negociação",
+                             "Fechado","Grupo Criado","Aguardando Pagamento","Implantação Agendada",
+                             "Em Implantação","Entrega Técnica"]
+    ETAPAS_POS_PROPOSTA  = ["Proposta","Negociação","Fechado","Grupo Criado","Aguardando Pagamento",
+                             "Implantação Agendada","Em Implantação","Entrega Técnica"]
+    ETAPAS_FECHADO       = ["Fechado","Grupo Criado","Aguardando Pagamento",
+                             "Implantação Agendada","Em Implantação","Entrega Técnica"]
+
+    n_contato   = _count(*ETAPAS_POS_CONTATO)
+    n_ligacao   = _count(*ETAPAS_POS_LIGACAO)
+    n_apres     = _count(*ETAPAS_POS_APRES)
+    n_proposta  = _count(*ETAPAS_POS_PROPOSTA)
+    n_fechados  = _count(*ETAPAS_FECHADO)
+
+    def _pct(n): return round(n / total * 100, 1) if total else 0
+
+    funil = [
+        {"label": "Total Leads",       "valor": total,     "pct": 100},
+        {"label": "Contato Iniciado",  "valor": n_contato, "pct": _pct(n_contato)},
+        {"label": "Ligação Realizada", "valor": n_ligacao, "pct": _pct(n_ligacao)},
+        {"label": "Apresentação",      "valor": n_apres,   "pct": _pct(n_apres)},
+        {"label": "Proposta",          "valor": n_proposta,"pct": _pct(n_proposta)},
+        {"label": "Fechado",           "valor": n_fechados,"pct": _pct(n_fechados)},
+    ]
+
+    # ── Follow-up / mensagens ───────────────────────────────────
+    followups    = db.query(func.count(models.ConversationState.id)).filter(
+        models.ConversationState.followup_sent == True
+    ).scalar() or 0
+    total_msgs   = db.query(func.count(models.Message.id)).scalar() or 0
+    media_msgs   = round(total_msgs / total, 1) if total else 0
+
+    return {
+        "resumo": {
+            "total_leads": total,
+            "leads_hoje": leads_hoje,
+            "leads_semana": leads_semana,
+            "leads_mes": leads_mes,
+            "responderam": responderam,
+            "pct_resposta": pct_resposta,
+            "followups_enviados": followups,
+            "media_msgs_por_lead": media_msgs,
+        },
+        "reunioes": {
+            "total": total_reunioes,
+            "confirmadas": confirmadas,
+            "canceladas": canceladas,
+            "taxa_comparecimento": taxa_comp,
+        },
+        "funil": funil,
+        "por_campanha": por_campanha,
+        "por_etapa": por_etapa,
+        "por_interesse": por_interesse,
+        "por_vendedor": por_vendedor,
+    }
+
 
 # =========================
 # ROOT
@@ -144,9 +475,8 @@ def get_leads(db: Session = Depends(get_db)):
 @app.delete("/leads")
 def delete_all_leads(db: Session = Depends(get_db)):
     try:
-        # Apaga primeiro as mensagens para evitar erro de chave estrangeira
         db.query(models.Message).delete()
-        # Em seguida, apaga todos os leads
+        db.query(models.LeadObs).delete()
         db.query(models.Lead).delete()
         db.commit()
         return {"ok": True, "message": "Banco de dados limpo com sucesso!"}
@@ -155,22 +485,77 @@ def delete_all_leads(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Erro ao limpar banco: {str(e)}")
 
 # =========================
-# KANBAN CRM
+# KANBAN CRM — QUADROS
 # =========================
-_ETAPAS = [
-    "Novo Lead", "Contato Iniciado", "Engajado", "Ligação Realizada",
-    "Apresentação Agendada", "Apresentação Realizada", "Proposta",
-    "Negociação", "Fechado", "Grupo Criado", "Aguardando Pagamento",
-    "Implantação Agendada", "Em Implantação", "Entrega Técnica",
-]
+@app.get("/kanban/boards", response_model=list[schemas.KanbanBoardResponse])
+def list_boards(db: Session = Depends(get_db)):
+    return db.query(models.KanbanBoard).order_by(models.KanbanBoard.id).all()
+
+
+@app.post("/kanban/boards", response_model=schemas.KanbanBoardResponse)
+def create_board(body: dict, db: Session = Depends(get_db)):
+    import json as _json
+    nome   = (body.get("nome") or "").strip()
+    etapas = body.get("etapas") or _ETAPAS_DEFAULT
+    if not nome:
+        raise HTTPException(status_code=400, detail="Nome é obrigatório")
+    b = models.KanbanBoard(nome=nome, etapas=_json.dumps(etapas))
+    db.add(b)
+    db.commit()
+    db.refresh(b)
+    return b
+
+
+@app.put("/kanban/boards/{board_id}", response_model=schemas.KanbanBoardResponse)
+def update_board(board_id: int, body: dict, db: Session = Depends(get_db)):
+    import json as _json
+    b = db.query(models.KanbanBoard).filter(models.KanbanBoard.id == board_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Quadro não encontrado")
+    if "nome" in body:
+        b.nome = (body["nome"] or "").strip() or b.nome
+    if "etapas" in body:
+        b.etapas = _json.dumps(body["etapas"])
+    db.commit()
+    db.refresh(b)
+    return b
+
+
+@app.delete("/kanban/boards/{board_id}")
+def delete_board(board_id: int, db: Session = Depends(get_db)):
+    if board_id == 1:
+        raise HTTPException(status_code=400, detail="O quadro padrão não pode ser excluído")
+    b = db.query(models.KanbanBoard).filter(models.KanbanBoard.id == board_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Quadro não encontrado")
+    # Move leads do quadro deletado para o quadro padrão
+    db.query(models.Lead).filter(models.Lead.board_id == board_id).update(
+        {"board_id": 1, "etapa": "Novo Lead"})
+    db.delete(b)
+    db.commit()
+    return {"ok": True}
+
 
 @app.get("/leads/kanban")
-def get_leads_kanban(db: Session = Depends(get_db)):
-    leads = db.query(models.Lead).all()
-    board = {e: [] for e in _ETAPAS}
+def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
+    import json as _json
+    from sqlalchemy import func
+    board = db.query(models.KanbanBoard).filter(models.KanbanBoard.id == board_id).first()
+    if not board:
+        raise HTTPException(status_code=404, detail="Quadro não encontrado")
+    etapas = _json.loads(board.etapas)
+    result = {e: [] for e in etapas}
+    leads  = db.query(models.Lead).filter(
+        (models.Lead.board_id == board_id) | (models.Lead.board_id == None if board_id == 1 else False)
+    ).all()
+    obs_counts = dict(
+        db.query(models.LeadObs.lead_id, func.count(models.LeadObs.id))
+        .group_by(models.LeadObs.lead_id)
+        .all()
+    )
     for lead in leads:
-        etapa = lead.etapa if lead.etapa in board else "Novo Lead"
-        board[etapa].append({
+        etapa = lead.etapa if lead.etapa in result else etapas[0]
+        result[etapa].append({
             "id": lead.id,
             "name": lead.name or "",
             "phone": lead.phone,
@@ -179,8 +564,9 @@ def get_leads_kanban(db: Session = Depends(get_db)):
             "vendedor": lead.vendedor or "",
             "status": lead.status,
             "sent_at": lead.sent_at.strftime("%d/%m %H:%M") if lead.sent_at else "",
+            "obs_count": obs_counts.get(lead.id, 0),
         })
-    return {"etapas": _ETAPAS, "board": board}
+    return {"board_id": board_id, "board_nome": board.nome, "etapas": etapas, "board": result}
 
 
 @app.patch("/leads/{lead_id}/etapa")
@@ -188,9 +574,47 @@ def update_lead_etapa(lead_id: int, body: dict, db: Session = Depends(get_db)):
     lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
-    for field in ("etapa", "status_interesse", "vendedor"):
+    for field in ("etapa", "status_interesse", "vendedor", "board_id"):
         if field in body:
             setattr(lead, field, body[field] or None)
+    db.commit()
+    return {"ok": True}
+
+
+# =========================
+# LEAD OBS — Histórico de interações
+# =========================
+@app.get("/leads/{lead_id}/obs", response_model=list[schemas.LeadObsResponse])
+def get_lead_obs(lead_id: int, db: Session = Depends(get_db)):
+    return (
+        db.query(models.LeadObs)
+        .filter(models.LeadObs.lead_id == lead_id)
+        .order_by(models.LeadObs.created_at.desc())
+        .all()
+    )
+
+
+@app.post("/leads/{lead_id}/obs", response_model=schemas.LeadObsResponse)
+def add_lead_obs(lead_id: int, body: schemas.LeadObsCreate, db: Session = Depends(get_db)):
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+    obs = models.LeadObs(lead_id=lead_id, texto=body.texto.strip(), autor=(body.autor or "").strip() or None)
+    db.add(obs)
+    db.commit()
+    db.refresh(obs)
+    return obs
+
+
+@app.delete("/leads/{lead_id}/obs/{obs_id}")
+def delete_lead_obs(lead_id: int, obs_id: int, db: Session = Depends(get_db)):
+    obs = db.query(models.LeadObs).filter(
+        models.LeadObs.id == obs_id,
+        models.LeadObs.lead_id == lead_id,
+    ).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observação não encontrada")
+    db.delete(obs)
     db.commit()
     return {"ok": True}
 
@@ -579,7 +1003,7 @@ async def send(
 def get_whatsapp_status():
     headers = {"apikey": API_KEY}
     try:
-        r = requests.get(f"{EVOLUTION_URL}/instance/connectionState/{INSTANCE}", headers=headers)
+        r = requests.get(f"{EVOLUTION_URL}/instance/connectionState/{INSTANCE}", headers=headers, timeout=5)
         return r.json()
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -588,7 +1012,7 @@ def get_whatsapp_status():
 def connect_whatsapp():
     headers = {"apikey": API_KEY}
     try:
-        r = requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers)
+        r = requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
         return r.json()
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -611,6 +1035,156 @@ def update_settings(body: dict, db: Session = Depends(get_db)):
 
 
 # =========================
+# WEBHOOK – Landing Page Captura → CRM
+# =========================
+@app.post("/webhook/captura-lead")
+async def webhook_captura_lead(request: Request, db: Session = Depends(get_db)):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "JSON inválido"}, status_code=400)
+
+    phone_raw = str(body.get("telefone", "")).replace(r"\D", "")
+    import re as _re
+    digits = _re.sub(r"\D", "", phone_raw)
+    phone = "55" + digits if not digits.startswith("55") else digits
+
+    name = str(body.get("nome_completo", "")).strip() or None
+
+    existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
+    if existing:
+        return {"ok": True, "id": existing.id, "status": "already_exists"}
+
+    lead = models.Lead(name=name, phone=phone, status="pendente", etapa="Novo Lead", board_id=1)
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    return {"ok": True, "id": lead.id, "status": "created"}
+
+
+# =========================
+# WEBHOOK – Facebook Lead Ads
+# =========================
+@app.get("/webhook/facebook")
+async def facebook_webhook_verify(request: Request):
+    """Verificação do webhook pelo Facebook (challenge handshake)."""
+    from config import load_settings
+    s = load_settings()
+    verify_token = s.get("fb_verify_token", "")
+    mode      = request.query_params.get("hub.mode")
+    token     = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge", "")
+    if mode == "subscribe" and verify_token and token == verify_token:
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(challenge)
+    return JSONResponse({"ok": False, "error": "Token inválido"}, status_code=403)
+
+
+@app.post("/webhook/facebook")
+async def facebook_webhook_lead(request: Request, db: Session = Depends(get_db)):
+    """Recebe eventos de leads do Facebook Lead Ads e cria o lead no CRM."""
+    import hashlib, hmac as _hmac, json as _json, re as _re
+    from config import load_settings
+
+    body_bytes = await request.body()
+    s          = load_settings()
+    app_secret = s.get("fb_app_secret", "")
+    page_token = s.get("fb_page_access_token", "")
+
+    # Verificação de assinatura (opcional — ativa quando fb_app_secret está preenchido)
+    if app_secret:
+        sig_header = request.headers.get("X-Hub-Signature-256", "")
+        expected   = "sha256=" + _hmac.new(app_secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+        if not _hmac.compare_digest(sig_header, expected):
+            return JSONResponse({"ok": False, "error": "Assinatura inválida"}, status_code=403)
+
+    try:
+        payload = _json.loads(body_bytes)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "JSON inválido"}, status_code=400)
+
+    if payload.get("object") != "page":
+        return {"ok": True, "skipped": "not a page event"}
+
+    results = []
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            if change.get("field") != "leadgen":
+                continue
+            value      = change.get("value", {})
+            leadgen_id = value.get("leadgen_id")
+            if not leadgen_id:
+                continue
+
+            # Busca dados completos do lead na Graph API
+            if not page_token:
+                print(f"[fb] leadgen_id={leadgen_id} ignorado: page_access_token não configurado")
+                continue
+            try:
+                r = requests.get(
+                    f"https://graph.facebook.com/v21.0/{leadgen_id}",
+                    params={"access_token": page_token},
+                    timeout=10,
+                )
+                lead_data = r.json()
+            except Exception as exc:
+                print(f"[fb] erro ao buscar leadgen {leadgen_id}: {exc}")
+                continue
+
+            if "error" in lead_data:
+                print(f"[fb] Graph API erro para {leadgen_id}: {lead_data['error']}")
+                continue
+
+            # Transforma field_data em dict {nome_campo: valor}
+            fields = {
+                f["name"]: f["values"][0]
+                for f in lead_data.get("field_data", [])
+                if f.get("values")
+            }
+
+            # Nome
+            name = (
+                fields.get("full_name")
+                or (f"{fields.get('first_name','')} {fields.get('last_name','')}".strip() or None)
+                or fields.get("nome_completo") or fields.get("nome") or fields.get("name")
+            )
+
+            # Telefone — aceita variações comuns de campo
+            phone_raw = (
+                fields.get("phone_number") or fields.get("phone")
+                or fields.get("telefone")  or fields.get("celular")
+                or fields.get("whatsapp")  or ""
+            )
+            digits = _re.sub(r"\D", "", phone_raw)
+            if not digits:
+                print(f"[fb] leadgen {leadgen_id} sem telefone — campos: {list(fields.keys())}")
+                results.append({"leadgen_id": leadgen_id, "status": "sem_telefone", "fields": list(fields.keys())})
+                continue
+            phone = "55" + digits if not digits.startswith("55") else digits
+
+            # Upsert: se o telefone já existe, não duplica
+            existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
+            if existing:
+                print(f"[fb] lead {phone} já existe id={existing.id}")
+                results.append({"id": existing.id, "status": "already_exists", "phone": phone})
+                continue
+
+            form_id  = value.get("form_id", "")
+            campaign = f"Facebook Leads · {form_id}" if form_id else "Facebook Leads"
+            lead = models.Lead(
+                name=name, phone=phone, status="pendente",
+                etapa="Novo Lead", board_id=1,
+                campaign_name=campaign,
+            )
+            db.add(lead)
+            db.commit()
+            db.refresh(lead)
+            print(f"[fb] ✓ novo lead: {name} | {phone} | id={lead.id}")
+            results.append({"id": lead.id, "status": "created", "phone": phone, "name": name})
+
+    return {"ok": True, "processed": len(results), "leads": results}
+
+
 # WEBHOOK – Evolution API → Backend
 # =========================
 @app.get("/webhook/evolution")

@@ -56,3 +56,71 @@ class MessageTemplateResponse(MessageTemplateBase):
 
     class Config:
         from_attributes = True
+
+
+# =========================
+# KANBAN BOARD
+# =========================
+class KanbanBoardResponse(BaseModel):
+    id: int
+    nome: str
+    etapas: str   # JSON string
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# =========================
+# AUTH
+# =========================
+class LoginRequest(BaseModel):
+    email: str
+    senha: str
+
+
+class TokenResponse(BaseModel):
+    token: str
+    nome: str
+    email: str
+
+
+class UsuarioResponse(BaseModel):
+    id: int
+    nome: str
+    email: str
+    ativo: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UsuarioCreate(BaseModel):
+    nome: str
+    email: str
+    senha: str
+
+
+class SenhaUpdate(BaseModel):
+    senha_atual: str
+    nova_senha: str
+
+
+# =========================
+# LEAD OBS
+# =========================
+class LeadObsCreate(BaseModel):
+    texto: str
+    autor: str | None = None
+
+
+class LeadObsResponse(BaseModel):
+    id: int
+    lead_id: int
+    texto: str
+    autor: str | None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -5,6 +5,17 @@ from datetime import datetime
 from db import Base
 
 
+class Usuario(Base):
+    __tablename__ = "usuarios"
+
+    id = Column(Integer, primary_key=True)
+    nome = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=False)
+    senha_hash = Column(String, nullable=False)
+    ativo = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Lead(Base):
     __tablename__ = "leads"
 
@@ -19,6 +30,7 @@ class Lead(Base):
     etapa = Column(String, default="Novo Lead", nullable=True)
     status_interesse = Column(String, nullable=True)   # quente / morno / frio
     vendedor = Column(String, nullable=True)
+    board_id = Column(Integer, nullable=True)
 
     messages = relationship("Message", back_populates="lead")
 
@@ -81,6 +93,16 @@ class ScheduledMeeting(Base):
     reminder_1h_sent  = Column(Boolean, default=False, nullable=False)
 
 
+class KanbanBoard(Base):
+    """Quadros do Funil CRM — cada um tem suas próprias etapas."""
+    __tablename__ = "kanban_boards"
+
+    id         = Column(Integer, primary_key=True)
+    nome       = Column(String, nullable=False)
+    etapas     = Column(String, nullable=False)   # JSON array de strings
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Participante(Base):
     """Membros do time comercial convidados automaticamente para as reuniões."""
     __tablename__ = "participantes"
@@ -89,4 +111,15 @@ class Participante(Base):
     nome = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     ativo = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LeadObs(Base):
+    """Observações / histórico de interações de um lead."""
+    __tablename__ = "lead_obs"
+
+    id = Column(Integer, primary_key=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
+    texto = Column(String, nullable=False)
+    autor = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -15,6 +15,10 @@ DEFAULT_SETTINGS = {
     "company_calendar_email": "",
     "gemini_api_key": "",
     "bot_persona": "",
+    # Facebook Lead Ads
+    "fb_verify_token": "",
+    "fb_page_access_token": "",
+    "fb_app_secret": "",
 }
 
 
