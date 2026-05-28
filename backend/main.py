@@ -1062,21 +1062,27 @@ def connect_whatsapp():
         if b64:
             return {"base64": b64}
 
-        # Poll /instance/connect up to 10x (2s each = 20s max)
+        # Give Baileys time to initialize before polling
+        time.sleep(5)
+
+        # Poll /instance/connect up to 12x (2s each = 24s max)
         last_raw = {}
-        for _ in range(10):
-            time.sleep(2)
+        for _ in range(12):
             connect_r = requests.get(
                 f"{EVOLUTION_URL}/instance/connect/{INSTANCE}",
                 headers=headers, timeout=15,
             )
-            connect_data = connect_r.json()
-            b64 = _extract_b64(connect_data)
-            if b64:
-                return {"base64": b64}
-            last_raw = connect_data
+            if connect_r.status_code == 200:
+                connect_data = connect_r.json()
+                b64 = _extract_b64(connect_data)
+                if b64:
+                    return {"base64": b64}
+                last_raw = connect_data
+            else:
+                last_raw = {"http_status": connect_r.status_code, "body": connect_r.text[:200]}
+            time.sleep(2)
 
-        return {"ok": False, "error": "QR não gerado", "raw": last_raw}
+        return {"ok": False, "error": "QR não gerado após criação", "create_raw": create_data, "connect_raw": last_raw}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
