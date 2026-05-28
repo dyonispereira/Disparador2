@@ -168,9 +168,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-EVOLUTION_URL = "http://127.0.0.1:8080"
-API_KEY = "ev_api_123456_mt_local"
-INSTANCE = "minha_instancia"
+import os
+EVOLUTION_URL = os.getenv("EVOLUTION_API_URL", "http://127.0.0.1:8080")
+API_KEY       = os.getenv("EVOLUTION_API_KEY", "ev_api_123456_mt_local")
+INSTANCE      = os.getenv("EVOLUTION_INSTANCE", "minha_instancia")
 
 
 def get_db():
