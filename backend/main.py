@@ -1013,35 +1013,34 @@ def get_whatsapp_status():
 def connect_whatsapp():
     headers = {"apikey": API_KEY}
     try:
-        # Check if instance exists; create it if not
-        check = requests.get(f"{EVOLUTION_URL}/instance/connectionState/{INSTANCE}", headers=headers, timeout=5)
-        if check.status_code == 404:
-            payload = {
-                "instanceName": INSTANCE,
-                "qrcode": True,
-                "integration": "WHATSAPP-BAILEYS",
-            }
-            create_r = requests.post(f"{EVOLUTION_URL}/instance/create", json=payload, headers=headers, timeout=10)
-            if create_r.status_code not in (200, 201):
-                return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
-            create_data = create_r.json()
-            # Creation response already has the QR code under qrcode.base64
-            qr = create_data.get("qrcode", {})
-            b64 = qr.get("base64") or qr.get("code")
-            if b64:
-                return {"base64": b64}
+        # If instance already open, just say so
+        state_r = requests.get(f"{EVOLUTION_URL}/instance/connectionState/{INSTANCE}", headers=headers, timeout=5)
+        if state_r.status_code == 200:
+            state_data = state_r.json()
+            instance_state = (state_data.get("instance") or {}).get("state") or state_data.get("state", "")
+            if instance_state == "open":
+                return {"connected": True, "state": "open"}
+            # Instance exists but not open → delete it so we can recreate with fresh QR
+            requests.delete(f"{EVOLUTION_URL}/instance/delete/{INSTANCE}", headers=headers, timeout=10)
 
-        r = requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
-        data = r.json()
-        # Normalise: v2 may return {base64, code} or {qrcode: {base64}}
-        b64 = (
-            data.get("base64")
-            or data.get("qrcode", {}).get("base64")
-            or data.get("code")
-        )
+        # Create fresh instance — creation response includes the QR code
+        payload = {
+            "instanceName": INSTANCE,
+            "qrcode": True,
+            "integration": "WHATSAPP-BAILEYS",
+        }
+        create_r = requests.post(f"{EVOLUTION_URL}/instance/create", json=payload, headers=headers, timeout=15)
+        if create_r.status_code not in (200, 201):
+            return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
+
+        create_data = create_r.json()
+        # v2 creation response: { instance: {...}, qrcode: { base64, code, pairingCode } }
+        qr = create_data.get("qrcode") or {}
+        b64 = qr.get("base64") or qr.get("code")
         if b64:
             return {"base64": b64}
-        return data
+
+        return {"ok": False, "error": "QR não gerado", "raw": create_data}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
