@@ -1038,7 +1038,8 @@
                 } else if (data.instance && data.instance.state === "open") {
                     alert("O WhatsApp já está conectado!"); checarStatus();
                 } else {
-                    alert("Não foi possível carregar o QR Code. O servidor da Evolution está rodando?");
+                    console.error("Resposta inesperada do /whatsapp/connect:", JSON.stringify(data));
+                    alert("Não foi possível carregar o QR Code.\n\nResposta: " + JSON.stringify(data).substring(0, 200));
                 }
             } catch (_) { alert("Erro ao conectar na API."); }
         }

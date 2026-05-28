@@ -1024,8 +1024,24 @@ def connect_whatsapp():
             create_r = requests.post(f"{EVOLUTION_URL}/instance/create", json=payload, headers=headers, timeout=10)
             if create_r.status_code not in (200, 201):
                 return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
+            create_data = create_r.json()
+            # Creation response already has the QR code under qrcode.base64
+            qr = create_data.get("qrcode", {})
+            b64 = qr.get("base64") or qr.get("code")
+            if b64:
+                return {"base64": b64}
+
         r = requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
-        return r.json()
+        data = r.json()
+        # Normalise: v2 may return {base64, code} or {qrcode: {base64}}
+        b64 = (
+            data.get("base64")
+            or data.get("qrcode", {}).get("base64")
+            or data.get("code")
+        )
+        if b64:
+            return {"base64": b64}
+        return data
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
