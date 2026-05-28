@@ -247,9 +247,15 @@ def criar_usuario(body: schemas.UsuarioCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    result = schemas.UsuarioCriadoResponse.model_validate(user)
-    result.senha_temporaria = senha_temp
-    return result
+    return {
+        "id": user.id,
+        "nome": user.nome,
+        "email": user.email,
+        "perfil": user.perfil,
+        "ativo": user.ativo,
+        "created_at": user.created_at,
+        "senha_temporaria": senha_temp,
+    }
 
 
 @app.put("/auth/usuarios/{uid}", response_model=schemas.UsuarioResponse)
