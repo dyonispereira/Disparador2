@@ -1029,19 +1029,42 @@
 
         async function conectarWhatsApp() {
             try {
-                alert("Solicitando QR Code... Aguarde alguns segundos.");
                 const res = await fetch(`${API_BASE}/whatsapp/connect`);
                 const data = await res.json();
-                if (data.base64) {
-                    document.getElementById('qr-image').src = data.base64;
-                    document.getElementById('qr-container').classList.remove('hidden');
-                } else if (data.instance && data.instance.state === "open") {
-                    alert("O WhatsApp já está conectado!"); checarStatus();
-                } else {
-                    console.error("Resposta inesperada do /whatsapp/connect:", JSON.stringify(data));
-                    alert("Não foi possível carregar o QR Code.\n\nResposta: " + JSON.stringify(data).substring(0, 200));
+
+                if (data.connected) { alert("O WhatsApp já está conectado!"); checarStatus(); return; }
+                if (data.base64)    { mostrarQR(data.base64); return; }
+                if (!data.waiting && !data.ok) {
+                    alert("Erro ao iniciar conexão: " + JSON.stringify(data).substring(0, 200));
+                    return;
                 }
+
+                // QR chegará via webhook — fazer polling em /whatsapp/qr
+                const btn = document.querySelector('[onclick="conectarWhatsApp()"]');
+                if (btn) btn.textContent = "⏳ Aguardando QR...";
+                let tentativas = 0;
+                const poll = setInterval(async () => {
+                    tentativas++;
+                    try {
+                        const qRes = await fetch(`${API_BASE}/whatsapp/qr`);
+                        const qData = await qRes.json();
+                        if (qData.base64) {
+                            clearInterval(poll);
+                            if (btn) btn.innerHTML = '<i class="fa-solid fa-qrcode mr-1"></i> Conectar';
+                            mostrarQR(qData.base64);
+                        } else if (tentativas >= 30) {
+                            clearInterval(poll);
+                            if (btn) btn.innerHTML = '<i class="fa-solid fa-qrcode mr-1"></i> Conectar';
+                            alert("QR Code não chegou em 60s. Tente novamente.");
+                        }
+                    } catch (_) {}
+                }, 2000);
             } catch (_) { alert("Erro ao conectar na API."); }
+        }
+
+        function mostrarQR(b64) {
+            document.getElementById('qr-image').src = b64;
+            document.getElementById('qr-container').classList.remove('hidden');
         }
 
         // ──────────────────────────────────────────

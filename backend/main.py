@@ -174,6 +174,9 @@ EVOLUTION_URL = os.getenv("EVOLUTION_API_URL", "http://127.0.0.1:8080")
 API_KEY       = os.getenv("EVOLUTION_API_KEY", "ev_api_123456_mt_local")
 INSTANCE      = os.getenv("EVOLUTION_INSTANCE", "minha_instancia")
 
+# In-memory QR store — populated by QRCODE_UPDATED webhook event
+_qr_store: dict = {"base64": None}
+
 
 def get_db():
     db = SessionLocal()
@@ -1032,7 +1035,7 @@ def _register_webhook_for_instance(instance_name: str, api_key: str, evolution_u
                 "enabled": True,
                 "webhookByEvents": False,
                 "webhookBase64": False,
-                "events": ["MESSAGES_UPSERT"],
+                "events": ["MESSAGES_UPSERT", "QRCODE_UPDATED", "CONNECTION_UPDATE"],
             }
         })
         requests.post(
@@ -1063,29 +1066,16 @@ def connect_whatsapp():
             if instance_state == "open":
                 return {"connected": True, "state": "open"}
 
-            if instance_state == "connecting":
-                # Baileys is active and generating QR — wait then poll for it
-                time.sleep(5)
-                last_raw = {}
-                for _ in range(15):
-                    connect_r = requests.get(
-                        f"{EVOLUTION_URL}/instance/connect/{INSTANCE}",
-                        headers=headers, timeout=15,
-                    )
-                    if connect_r.status_code == 200:
-                        connect_data = connect_r.json()
-                        b64 = _extract_b64(connect_data)
-                        if b64:
-                            return {"base64": b64}
-                        last_raw = connect_data
-                    time.sleep(2)
-                return {"ok": False, "error": "QR não gerado (connecting)", "raw": last_raw}
+            if instance_state in ("connecting", "close"):
+                # Trigger connect so Baileys sends QR via QRCODE_UPDATED webhook
+                requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
+                _qr_store["base64"] = None  # clear old QR
+                return {"ok": True, "waiting": True}
 
-            # state == "close" or other → delete and recreate fresh
+            # Unknown state — delete and recreate
             requests.delete(f"{EVOLUTION_URL}/instance/logout/{INSTANCE}", headers=headers, timeout=10)
             time.sleep(1)
             requests.delete(f"{EVOLUTION_URL}/instance/delete/{INSTANCE}", headers=headers, timeout=10)
-            # Wait until instance is actually gone (max 12s)
             for _ in range(6):
                 time.sleep(2)
                 chk = requests.get(f"{EVOLUTION_URL}/instance/connectionState/{INSTANCE}", headers=headers, timeout=5)
@@ -1093,6 +1083,7 @@ def connect_whatsapp():
                     break
 
         # Create fresh instance
+        _qr_store["base64"] = None
         create_r = requests.post(
             f"{EVOLUTION_URL}/instance/create",
             json={"instanceName": INSTANCE, "qrcode": True, "integration": "WHATSAPP-BAILEYS"},
@@ -1101,37 +1092,24 @@ def connect_whatsapp():
         if create_r.status_code not in (200, 201):
             return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
 
-        # Register webhook automatically after creating the instance
+        # Register webhook (includes QRCODE_UPDATED so QR arrives via webhook)
         _register_webhook_for_instance(INSTANCE, API_KEY, EVOLUTION_URL)
 
-        create_data = create_r.json()
-        b64 = _extract_b64(create_data.get("qrcode") or create_data)
-        if b64:
-            return {"base64": b64}
+        # Trigger connect so Baileys starts QR generation
+        requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
 
-        # Give Baileys time to initialize before polling
-        time.sleep(10)
-
-        # Poll /instance/connect up to 12x (2s each = 24s max)
-        last_raw = {}
-        for _ in range(12):
-            connect_r = requests.get(
-                f"{EVOLUTION_URL}/instance/connect/{INSTANCE}",
-                headers=headers, timeout=15,
-            )
-            if connect_r.status_code == 200:
-                connect_data = connect_r.json()
-                b64 = _extract_b64(connect_data)
-                if b64:
-                    return {"base64": b64}
-                last_raw = connect_data
-            else:
-                last_raw = {"http_status": connect_r.status_code, "body": connect_r.text[:200]}
-            time.sleep(2)
-
-        return {"ok": False, "error": "QR não gerado após criação", "create_raw": create_data, "connect_raw": last_raw}
+        return {"ok": True, "waiting": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@app.get("/whatsapp/qr")
+def get_whatsapp_qr():
+    """Frontend polls this after clicking Conectar to get the QR once it arrives via webhook."""
+    b64 = _qr_store.get("base64")
+    if b64:
+        return {"base64": b64}
+    return {"base64": None}
 
 
 # =========================
@@ -1321,6 +1299,19 @@ async def webhook_evolution(request: Request):
     print(f"[webhook] raw payload keys: {list(payload.keys())}")
 
     event = payload.get("event", "")
+
+    # Capture QR code delivered by Evolution API
+    if event in ("qrcode.updated", "QRCODE_UPDATED"):
+        qr_data = payload.get("data", {})
+        b64 = (
+            (qr_data.get("qrcode") or {}).get("base64")
+            or qr_data.get("base64")
+        )
+        if b64:
+            _qr_store["base64"] = b64
+            print("[webhook] QR code recebido e armazenado")
+        return {"ok": True}
+
     if event not in ("messages.upsert", "MESSAGES_UPSERT"):
         print(f"[webhook] skipped event: {event}")
         return {"ok": True, "skipped": f"event={event}"}
