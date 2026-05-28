@@ -43,6 +43,9 @@ def _run_migrations():
                 autor TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )""",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS perfil VARCHAR NOT NULL DEFAULT 'vendedor'",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS primeiro_login BOOLEAN NOT NULL DEFAULT false",
+            "UPDATE usuarios SET perfil = 'admin', primeiro_login = false WHERE email = 'admin@gestorpec.com.br'",
         ]:
             try:
                 conn.execute(text(sql))
@@ -201,6 +204,8 @@ def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
         token=auth.create_token(user.email),
         nome=user.nome,
         email=user.email,
+        perfil=getattr(user, "perfil", "vendedor") or "vendedor",
+        primeiro_login=bool(getattr(user, "primeiro_login", False)),
     )
 
 
@@ -219,19 +224,77 @@ def listar_usuarios(db: Session = Depends(get_db)):
     return db.query(models.Usuario).order_by(models.Usuario.id).all()
 
 
-@app.post("/auth/usuarios", response_model=schemas.UsuarioResponse)
+@app.post("/auth/usuarios", response_model=schemas.UsuarioCriadoResponse)
 def criar_usuario(body: schemas.UsuarioCreate, db: Session = Depends(get_db)):
+    import secrets, string as _string
     if db.query(models.Usuario).filter(models.Usuario.email == body.email).first():
         raise HTTPException(status_code=400, detail="Email já cadastrado")
+    senha_temp = None
+    if body.senha:
+        senha_hash = auth.hash_password(body.senha)
+        primeiro = False
+    else:
+        senha_temp = ''.join(secrets.choice(_string.ascii_letters + _string.digits) for _ in range(10))
+        senha_hash = auth.hash_password(senha_temp)
+        primeiro = True
     user = models.Usuario(
         nome=body.nome,
         email=body.email,
-        senha_hash=auth.hash_password(body.senha),
+        senha_hash=senha_hash,
+        perfil=body.perfil or "vendedor",
+        primeiro_login=primeiro,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    result = schemas.UsuarioCriadoResponse.model_validate(user)
+    result.senha_temporaria = senha_temp
+    return result
+
+
+@app.put("/auth/usuarios/{uid}", response_model=schemas.UsuarioResponse)
+def editar_usuario(uid: int, body: schemas.UsuarioUpdate, request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("Authorization", "")[7:]
+    caller_email = auth.decode_token(token)
+    user = db.query(models.Usuario).filter(models.Usuario.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if body.nome is not None:
+        user.nome = body.nome
+    if body.email is not None:
+        conflict = db.query(models.Usuario).filter(
+            models.Usuario.email == body.email,
+            models.Usuario.id != uid
+        ).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="Email já cadastrado")
+        user.email = body.email
+    if body.perfil is not None:
+        user.perfil = body.perfil
+    if body.ativo is not None:
+        if user.email == caller_email and not body.ativo:
+            raise HTTPException(status_code=400, detail="Não é possível desativar o próprio usuário")
+        user.ativo = body.ativo
+    db.commit()
+    db.refresh(user)
     return user
+
+
+@app.post("/auth/usuarios/{uid}/reset-senha")
+def reset_senha_usuario(uid: int, request: Request, db: Session = Depends(get_db)):
+    import secrets, string as _string
+    token = request.headers.get("Authorization", "")[7:]
+    caller_email = auth.decode_token(token)
+    user = db.query(models.Usuario).filter(models.Usuario.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    if user.email == caller_email:
+        raise HTTPException(status_code=400, detail="Use /auth/trocar-senha para alterar a própria senha")
+    nova_senha = ''.join(secrets.choice(_string.ascii_letters + _string.digits) for _ in range(10))
+    user.senha_hash = auth.hash_password(nova_senha)
+    user.primeiro_login = True
+    db.commit()
+    return {"ok": True, "nova_senha": nova_senha, "email": user.email, "nome": user.nome}
 
 
 @app.delete("/auth/usuarios/{uid}")
@@ -256,6 +319,7 @@ def trocar_senha(body: schemas.SenhaUpdate, request: Request, db: Session = Depe
     if not user or not auth.verify_password(body.senha_atual, user.senha_hash):
         raise HTTPException(status_code=401, detail="Senha atual incorreta")
     user.senha_hash = auth.hash_password(body.nova_senha)
+    user.primeiro_login = False
     db.commit()
     return {"ok": True}
 

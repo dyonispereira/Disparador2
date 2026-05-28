@@ -325,7 +325,127 @@
             </div>
         </div>
 
+        <!-- ── Acesso ao CRM ───────────────────────────── -->
+        <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-lg font-bold">
+                    <i class="fa-solid fa-key text-amber-500 mr-2"></i>Acesso ao CRM
+                </h2>
+                <button onclick="abrirModalCriarUsuario()"
+                    class="bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+                    <i class="fa-solid fa-user-plus mr-1"></i> Novo Acesso
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-slate-500 border-b">
+                            <th class="pb-2">Nome</th>
+                            <th class="pb-2">Email</th>
+                            <th class="pb-2 text-center">Perfil</th>
+                            <th class="pb-2 text-center">Status</th>
+                            <th class="pb-2 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-usuarios-crm">
+                        <tr><td colspan="5" class="py-6 text-center text-slate-400">Carregando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </main>
+    </div>
+
+    <!-- Modal: Criar/Editar Usuário CRM -->
+    <div id="modal-usuario-crm" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h3 class="text-lg font-bold mb-4" id="modal-usuario-titulo">Novo Acesso ao CRM</h3>
+            <input type="hidden" id="modal-usuario-id">
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Nome</label>
+                    <input id="modal-usuario-nome" type="text" placeholder="João Silva"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Email (login)</label>
+                    <input id="modal-usuario-email" type="email" placeholder="joao@empresa.com"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Perfil</label>
+                    <select id="modal-usuario-perfil"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+                        <option value="vendedor">Vendedor</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div id="modal-usuario-ativo-wrap" class="hidden">
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Status</label>
+                    <select id="modal-usuario-ativo"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
+                        <option value="true">Ativo</option>
+                        <option value="false">Inativo</option>
+                    </select>
+                </div>
+                <p id="modal-usuario-erro" class="text-red-500 text-xs hidden"></p>
+            </div>
+            <div class="flex gap-3 mt-5">
+                <button onclick="salvarUsuarioCRM()"
+                    class="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition">
+                    <i class="fa-solid fa-floppy-disk mr-1"></i> Salvar
+                </button>
+                <button onclick="fecharModalUsuario()"
+                    class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-4 py-2 rounded-lg text-sm transition">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Senha gerada -->
+    <div id="modal-senha-crm" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 text-center">
+            <div class="text-4xl mb-3">🎉</div>
+            <h3 class="text-lg font-bold mb-2">Acesso Criado!</h3>
+            <p class="text-sm text-slate-600 mb-4">Envie estas credenciais ao usuário:</p>
+            <div class="bg-slate-50 border rounded-lg p-4 text-left text-sm space-y-1 font-mono">
+                <p>🔐 Login: <span id="senha-modal-email" class="font-bold"></span></p>
+                <p>🔑 Senha: <span id="senha-modal-senha" class="font-bold text-amber-600"></span></p>
+            </div>
+            <p class="text-xs text-slate-400 mt-3">O utilizador deve alterar a senha no primeiro acesso.</p>
+            <button onclick="document.getElementById('modal-senha-crm').classList.add('hidden')"
+                class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition">
+                OK, entendido
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal: Primeiro login — troca obrigatória de senha -->
+    <div id="modal-primeiro-login" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <div class="text-3xl mb-2 text-center">🔐</div>
+            <h3 class="text-lg font-bold mb-1 text-center">Defina sua senha</h3>
+            <p class="text-sm text-slate-500 mb-4 text-center">Por segurança, crie uma senha pessoal para continuar.</p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Senha temporária (recebida)</label>
+                    <input id="pl-senha-atual" type="password"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-1">Nova senha</label>
+                    <input id="pl-nova-senha" type="password" placeholder="Mínimo 6 caracteres"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                </div>
+                <p id="pl-erro" class="text-red-500 text-xs hidden"></p>
+            </div>
+            <button onclick="trocarSenhaPrimeiroLogin()"
+                class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition">
+                Salvar nova senha
+            </button>
+        </div>
     </div>
 
     <!-- ════════════════════════════════════════════════════════
@@ -914,8 +1034,15 @@
                 const data = await res.json();
                 localStorage.setItem('auth_token', data.token);
                 localStorage.setItem('auth_nome', data.nome);
+                localStorage.setItem('auth_perfil', data.perfil || 'vendedor');
                 ocultarLogin(data.nome);
                 inicializarApp();
+                if (data.primeiro_login) {
+                    document.getElementById('pl-senha-atual').value = '';
+                    document.getElementById('pl-nova-senha').value = '';
+                    document.getElementById('pl-erro').classList.add('hidden');
+                    document.getElementById('modal-primeiro-login').classList.remove('hidden');
+                }
             } catch (e) {
                 err.textContent = 'Erro de conexão com o servidor.';
                 err.classList.remove('hidden');
@@ -979,7 +1106,7 @@
             btn.classList.remove('text-white/80');
 
             if (name === 'meetings') { carregarReunioes(); carregarConversas(); }
-            if (name === 'team') { carregarParticipantes(); }
+            if (name === 'team') { carregarParticipantes(); carregarUsuariosCRM(); }
             if (name === 'settings') { carregarConfiguracoes(); verificarGoogle(); }
             if (name === 'funil') { carregarBoards().then(() => carregarKanban()); }
             if (name === 'dashboard') { _dashPopularBoards().then(() => carregarDashboard()); }
@@ -1512,6 +1639,177 @@
         async function toggleParticipante(id) {
             await fetch(`${API_BASE}/participantes/${id}/toggle`, { method: 'PATCH' });
             carregarParticipantes();
+        }
+
+        // ══════════════════════════════════════════
+        // ACESSO CRM — Gestão de Utilizadores
+        // ══════════════════════════════════════════
+
+        async function carregarUsuariosCRM() {
+            try {
+                const res = await fetch(`${API_BASE}/auth/usuarios`);
+                const lista = await res.json();
+                const tbody = document.getElementById('tabela-usuarios-crm');
+                if (!lista.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-slate-400">Nenhum utilizador cadastrado.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = lista.map(u => `
+                    <tr class="border-b last:border-0 hover:bg-slate-50 transition">
+                        <td class="py-3 font-medium">${u.nome}</td>
+                        <td class="py-3 text-slate-500">${u.email}</td>
+                        <td class="py-3 text-center">
+                            <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${u.perfil === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
+                                ${u.perfil === 'admin' ? '👑 Admin' : '👤 Vendedor'}
+                            </span>
+                        </td>
+                        <td class="py-3 text-center">
+                            <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${u.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}">
+                                ${u.ativo ? 'Ativo' : 'Inativo'}
+                            </span>
+                        </td>
+                        <td class="py-3 text-right space-x-1">
+                            <button onclick="editarUsuarioCRM(${u.id},'${u.nome.replace(/'/g,"\\'")}','${u.email}','${u.perfil}',${u.ativo})"
+                                class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-2 py-1 rounded-lg transition">
+                                <i class="fa-solid fa-pen mr-1"></i>Editar
+                            </button>
+                            <button onclick="resetarSenhaCRM(${u.id},'${u.nome.replace(/'/g,"\\'")}')"
+                                class="text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold px-2 py-1 rounded-lg transition">
+                                <i class="fa-solid fa-rotate mr-1"></i>Reset
+                            </button>
+                            <button onclick="deletarUsuarioCRM(${u.id},'${u.nome.replace(/'/g,"\\'")}')"
+                                class="text-xs bg-red-50 hover:bg-red-100 text-red-600 font-semibold px-2 py-1 rounded-lg transition">
+                                <i class="fa-solid fa-trash mr-1"></i>Excluir
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                document.getElementById('tabela-usuarios-crm').innerHTML =
+                    '<tr><td colspan="5" class="py-6 text-center text-red-400">Erro ao carregar.</td></tr>';
+            }
+        }
+
+        function abrirModalCriarUsuario() {
+            document.getElementById('modal-usuario-id').value = '';
+            document.getElementById('modal-usuario-titulo').textContent = 'Novo Acesso ao CRM';
+            document.getElementById('modal-usuario-nome').value = '';
+            document.getElementById('modal-usuario-email').value = '';
+            document.getElementById('modal-usuario-perfil').value = 'vendedor';
+            document.getElementById('modal-usuario-ativo-wrap').classList.add('hidden');
+            document.getElementById('modal-usuario-erro').classList.add('hidden');
+            document.getElementById('modal-usuario-crm').classList.remove('hidden');
+        }
+
+        function editarUsuarioCRM(id, nome, email, perfil, ativo) {
+            document.getElementById('modal-usuario-id').value = id;
+            document.getElementById('modal-usuario-titulo').textContent = 'Editar Acesso ao CRM';
+            document.getElementById('modal-usuario-nome').value = nome;
+            document.getElementById('modal-usuario-email').value = email;
+            document.getElementById('modal-usuario-perfil').value = perfil;
+            document.getElementById('modal-usuario-ativo').value = ativo ? 'true' : 'false';
+            document.getElementById('modal-usuario-ativo-wrap').classList.remove('hidden');
+            document.getElementById('modal-usuario-erro').classList.add('hidden');
+            document.getElementById('modal-usuario-crm').classList.remove('hidden');
+        }
+
+        function fecharModalUsuario() {
+            document.getElementById('modal-usuario-crm').classList.add('hidden');
+        }
+
+        async function salvarUsuarioCRM() {
+            const id    = document.getElementById('modal-usuario-id').value;
+            const nome  = document.getElementById('modal-usuario-nome').value.trim();
+            const email = document.getElementById('modal-usuario-email').value.trim();
+            const perfil = document.getElementById('modal-usuario-perfil').value;
+            const ativoVal = document.getElementById('modal-usuario-ativo').value;
+            const erro  = document.getElementById('modal-usuario-erro');
+
+            if (!nome || !email) {
+                erro.textContent = 'Nome e email são obrigatórios.';
+                erro.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                let res;
+                if (id) {
+                    res = await fetch(`${API_BASE}/auth/usuarios/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nome, email, perfil, ativo: ativoVal === 'true' }),
+                    });
+                } else {
+                    res = await fetch(`${API_BASE}/auth/usuarios`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nome, email, perfil }),
+                    });
+                }
+                const data = await res.json();
+                if (!res.ok) {
+                    erro.textContent = data.detail || 'Erro ao salvar.';
+                    erro.classList.remove('hidden');
+                    return;
+                }
+                fecharModalUsuario();
+                carregarUsuariosCRM();
+                if (!id && data.senha_temporaria) {
+                    document.getElementById('senha-modal-email').textContent = data.email;
+                    document.getElementById('senha-modal-senha').textContent = data.senha_temporaria;
+                    document.getElementById('modal-senha-crm').classList.remove('hidden');
+                }
+            } catch (e) {
+                erro.textContent = 'Erro de conexão.';
+                erro.classList.remove('hidden');
+            }
+        }
+
+        async function resetarSenhaCRM(id, nome) {
+            if (!confirm(`Resetar a senha de "${nome}"? Uma nova senha temporária será gerada.`)) return;
+            try {
+                const res = await fetch(`${API_BASE}/auth/usuarios/${id}/reset-senha`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) { alert(data.detail || 'Erro ao resetar senha.'); return; }
+                document.getElementById('senha-modal-email').textContent = data.email;
+                document.getElementById('senha-modal-senha').textContent = data.nova_senha;
+                document.getElementById('modal-senha-crm').classList.remove('hidden');
+            } catch (_) { alert('Erro de conexão.'); }
+        }
+
+        async function deletarUsuarioCRM(id, nome) {
+            if (!confirm(`Excluir o acesso de "${nome}"? Esta ação não pode ser desfeita.`)) return;
+            try {
+                const res = await fetch(`${API_BASE}/auth/usuarios/${id}`, { method: 'DELETE' });
+                if (res.ok) carregarUsuariosCRM();
+                else { const d = await res.json(); alert(d.detail || 'Erro ao excluir.'); }
+            } catch (_) { alert('Erro de conexão.'); }
+        }
+
+        async function trocarSenhaPrimeiroLogin() {
+            const senhaAtual = document.getElementById('pl-senha-atual').value;
+            const novaSenha  = document.getElementById('pl-nova-senha').value;
+            const erro       = document.getElementById('pl-erro');
+            if (!senhaAtual || !novaSenha) {
+                erro.textContent = 'Preencha os dois campos.'; erro.classList.remove('hidden'); return;
+            }
+            if (novaSenha.length < 6) {
+                erro.textContent = 'A nova senha deve ter pelo menos 6 caracteres.'; erro.classList.remove('hidden'); return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/auth/trocar-senha`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ senha_atual: senhaAtual, nova_senha: novaSenha }),
+                });
+                if (!res.ok) {
+                    const d = await res.json();
+                    erro.textContent = d.detail || 'Senha atual incorreta.'; erro.classList.remove('hidden'); return;
+                }
+                document.getElementById('modal-primeiro-login').classList.add('hidden');
+            } catch (_) {
+                erro.textContent = 'Erro de conexão.'; erro.classList.remove('hidden');
+            }
         }
 
         // ══════════════════════════════════════════

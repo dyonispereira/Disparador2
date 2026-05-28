@@ -83,14 +83,31 @@ class TokenResponse(BaseModel):
     token: str
     nome: str
     email: str
+    perfil: str = "vendedor"
+    primeiro_login: bool = False
 
 
 class UsuarioResponse(BaseModel):
     id: int
     nome: str
     email: str
+    perfil: str = "vendedor"
+    ativo: bool
+    primeiro_login: bool = False
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UsuarioCriadoResponse(BaseModel):
+    id: int
+    nome: str
+    email: str
+    perfil: str
     ativo: bool
     created_at: datetime
+    senha_temporaria: str | None = None
 
     class Config:
         from_attributes = True
@@ -99,7 +116,15 @@ class UsuarioResponse(BaseModel):
 class UsuarioCreate(BaseModel):
     nome: str
     email: str
-    senha: str
+    senha: str | None = None
+    perfil: str = "vendedor"
+
+
+class UsuarioUpdate(BaseModel):
+    nome: str | None = None
+    email: str | None = None
+    perfil: str | None = None
+    ativo: bool | None = None
 
 
 class SenhaUpdate(BaseModel):

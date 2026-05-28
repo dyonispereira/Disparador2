@@ -12,7 +12,9 @@ class Usuario(Base):
     nome = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     senha_hash = Column(String, nullable=False)
+    perfil = Column(String, default="vendedor", server_default="vendedor", nullable=False)
     ativo = Column(Boolean, default=True, nullable=False)
+    primeiro_login = Column(Boolean, default=True, server_default="false", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
