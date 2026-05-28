@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # 1. Banco de Dados Postgres
+  postgres:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: disparador
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  # 2. Redis (Recomendado pela Evolution API)
+  redis:
+    image: redis:alpine
+    container_name: redis_cache
+    restart: always
+
+  # 3. Evolution API (Nova V2)
+  evolution:
+    image: evoapicloud/evolution-api:v2.2.0
+    container_name: evolution_api
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      # Redis Config
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/1
+      # Auth Config
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=ev_api_token_12345
+      # Database Config (Postgres)
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://postgres:admin@postgres:5432/disparador
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  # 4. Seu Backend Python
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend_app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:admin@postgres:5432/disparador
+      - EVOLUTION_API_URL=http://evolution:8080
+      - EVOLUTION_API_KEY=ev_api_token_12345
+      # NOTA: Troque abaixo pelo IP público da sua Hostinger
+      - WEBHOOK_BASE_URL=http://2.25.140.209:8000
+    depends_on:
+      - postgres
+      - evolution
+    restart: always
+
+  # 5. Frontend (Nginx)
+  frontend:
+    image: nginx:alpine
+    container_name: frontend_app
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    restart: always
+
+volumes:
+  postgres_data:
