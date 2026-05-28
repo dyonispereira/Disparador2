@@ -136,7 +136,7 @@ async def _reminder_loop():
 app = FastAPI()
 
 # Rotas públicas — não exigem token
-_PUBLIC = {"/", "/auth/login", "/whatsapp/qr", "/whatsapp/status", "/whatsapp/connect"}
+_PUBLIC = {"/", "/auth/login", "/whatsapp/qr", "/whatsapp/status", "/whatsapp/connect", "/google/status"}
 _PUBLIC_PREFIX = "/webhook"
 
 
