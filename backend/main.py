@@ -1027,8 +1027,9 @@ def _register_webhook_for_instance(instance_name: str, api_key: str, evolution_u
     from config import load_settings
     try:
         settings = load_settings()
-        base_url = settings.get("webhook_base_url", "http://localhost:8000")
-        webhook_url = f"{base_url}/webhook/evolution"
+        # Use internal Docker URL so Evolution API (inside Docker) can reach the backend
+        internal_url = os.getenv("EVOLUTION_WEBHOOK_URL") or settings.get("webhook_base_url", "http://localhost:8000")
+        webhook_url = f"{internal_url}/webhook/evolution"
         body = _json.dumps({
             "webhook": {
                 "url": webhook_url,
