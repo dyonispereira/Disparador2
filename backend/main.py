@@ -1068,9 +1068,11 @@ def connect_whatsapp():
                 return {"connected": True, "state": "open"}
 
             if instance_state in ("connecting", "close"):
+                # If QR already stored, return it immediately
+                if _qr_store.get("base64"):
+                    return {"base64": _qr_store["base64"]}
                 # Trigger connect so Baileys sends QR via QRCODE_UPDATED webhook
                 requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
-                _qr_store["base64"] = None  # clear old QR
                 return {"ok": True, "waiting": True}
 
             # Unknown state — delete and recreate
@@ -1083,7 +1085,7 @@ def connect_whatsapp():
                 if chk.status_code == 404:
                     break
 
-        # Create fresh instance
+        # Create fresh instance (clear any stale QR from previous attempt)
         _qr_store["base64"] = None
         create_r = requests.post(
             f"{EVOLUTION_URL}/instance/create",

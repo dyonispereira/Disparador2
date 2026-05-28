@@ -1052,10 +1052,10 @@
                             clearInterval(poll);
                             if (btn) btn.innerHTML = '<i class="fa-solid fa-qrcode mr-1"></i> Conectar';
                             mostrarQR(qData.base64);
-                        } else if (tentativas >= 30) {
+                        } else if (tentativas >= 60) {
                             clearInterval(poll);
                             if (btn) btn.innerHTML = '<i class="fa-solid fa-qrcode mr-1"></i> Conectar';
-                            alert("QR Code não chegou em 60s. Tente novamente.");
+                            alert("QR Code não chegou em 120s. Tente novamente.");
                         }
                     } catch (_) {}
                 }, 2000);
