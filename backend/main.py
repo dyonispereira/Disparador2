@@ -1036,11 +1036,27 @@ def connect_whatsapp():
             if instance_state == "open":
                 return {"connected": True, "state": "open"}
 
-            # Instance exists → logout then delete to clear Baileys saved session
+            if instance_state == "connecting":
+                # Baileys is active and generating QR — just poll for it
+                last_raw = {}
+                for _ in range(15):
+                    connect_r = requests.get(
+                        f"{EVOLUTION_URL}/instance/connect/{INSTANCE}",
+                        headers=headers, timeout=15,
+                    )
+                    if connect_r.status_code == 200:
+                        connect_data = connect_r.json()
+                        b64 = _extract_b64(connect_data)
+                        if b64:
+                            return {"base64": b64}
+                        last_raw = connect_data
+                    time.sleep(2)
+                return {"ok": False, "error": "QR não gerado (connecting)", "raw": last_raw}
+
+            # state == "close" or other → delete and recreate fresh
             requests.delete(f"{EVOLUTION_URL}/instance/logout/{INSTANCE}", headers=headers, timeout=10)
             time.sleep(1)
             requests.delete(f"{EVOLUTION_URL}/instance/delete/{INSTANCE}", headers=headers, timeout=10)
-
             # Wait until instance is actually gone (max 12s)
             for _ in range(6):
                 time.sleep(2)
