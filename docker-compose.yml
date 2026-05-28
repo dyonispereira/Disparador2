@@ -56,6 +56,7 @@ services:
       - DATABASE_URL=postgresql://postgres:admin@postgres:5432/disparador
       - EVOLUTION_API_URL=http://evolution:8080
       - EVOLUTION_API_KEY=ev_api_token_12345
+      - EVOLUTION_INSTANCE=instancia_crm
       # NOTA: Troque abaixo pelo IP público da sua Hostinger
       - WEBHOOK_BASE_URL=http://2.25.140.209:8000
     depends_on:
