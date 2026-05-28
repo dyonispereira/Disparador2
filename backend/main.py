@@ -1064,7 +1064,8 @@ def connect_whatsapp():
                 return {"connected": True, "state": "open"}
 
             if instance_state == "connecting":
-                # Baileys is active and generating QR — just poll for it
+                # Baileys is active and generating QR — wait then poll for it
+                time.sleep(5)
                 last_raw = {}
                 for _ in range(15):
                     connect_r = requests.get(
@@ -1109,7 +1110,7 @@ def connect_whatsapp():
             return {"base64": b64}
 
         # Give Baileys time to initialize before polling
-        time.sleep(5)
+        time.sleep(10)
 
         # Poll /instance/connect up to 12x (2s each = 24s max)
         last_raw = {}
