@@ -824,7 +824,9 @@
     ════════════════════════════════════════════════════════ -->
     <script>
         // Em produção usa o IP/domínio do servidor; localmente usa 127.0.0.1
-        const API_BASE = `http://${window.location.hostname || '127.0.0.1'}:8000`;
+        const API_BASE = (window.location.port === '8000')
+            ? `http://${window.location.hostname}:8000`
+            : `${window.location.protocol}//${window.location.hostname}`;
 
         // ══════════════════════════════════════════
         // AUTH — Login / Logout / Fetch interceptor
@@ -1902,7 +1904,8 @@
                         ondragstart="event.dataTransfer.setData('leadId','${lead.id}');event.dataTransfer.setData('fromEtapa',\`${lead.etapa}\`)"
                         onclick="abrirModal(${JSON.stringify(lead).replace(/"/g,'&quot;')})">
                 <div class="font-semibold text-sm text-slate-800 truncate mb-1">${lead.name || '(sem nome)'}</div>
-                <div class="text-xs text-slate-500 mb-1.5"><i class="fa-solid fa-phone mr-1"></i>${lead.phone}</div>
+                <div class="text-xs text-slate-500 mb-1"><i class="fa-solid fa-phone mr-1"></i>${lead.phone}</div>
+                ${lead.created_at ? `<div class="text-xs text-slate-400 mb-1"><i class="fa-regular fa-calendar mr-1"></i>${lead.created_at}</div>` : ''}
                 ${badge ? `<div class="mb-1">${badge}</div>` : ''}
                 <div class="flex items-center justify-between gap-2">
                   ${vend}

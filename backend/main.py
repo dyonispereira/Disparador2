@@ -570,6 +570,7 @@ def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
             "status": lead.status,
             "sent_at": lead.sent_at.strftime("%d/%m %H:%M") if lead.sent_at else "",
             "obs_count": obs_counts.get(lead.id, 0),
+            "created_at": lead.created_at.strftime("%d/%m/%Y") if lead.created_at else "",
         })
     return {"board_id": board_id, "board_nome": board.nome, "etapas": etapas, "board": result}
 
