@@ -1010,46 +1010,70 @@ def get_whatsapp_status():
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+def _extract_b64(data: dict):
+    return (
+        data.get("base64")
+        or (data.get("qrcode") or {}).get("base64")
+        or data.get("code")
+    )
+
+
 @app.get("/whatsapp/connect")
 def connect_whatsapp():
     headers = {"apikey": API_KEY}
     try:
-        # If instance already open, just say so
-        state_r = requests.get(f"{EVOLUTION_URL}/instance/connectionState/{INSTANCE}", headers=headers, timeout=5)
+        state_r = requests.get(
+            f"{EVOLUTION_URL}/instance/connectionState/{INSTANCE}",
+            headers=headers, timeout=5,
+        )
+
         if state_r.status_code == 200:
             state_data = state_r.json()
-            instance_state = (state_data.get("instance") or {}).get("state") or state_data.get("state", "")
+            instance_state = (
+                (state_data.get("instance") or {}).get("state")
+                or state_data.get("state", "")
+            )
             if instance_state == "open":
                 return {"connected": True, "state": "open"}
-            # Instance exists but not open → delete it so we can recreate with fresh QR
-            requests.delete(f"{EVOLUTION_URL}/instance/delete/{INSTANCE}", headers=headers, timeout=10)
 
-        # Create fresh instance — creation response includes the QR code
-        payload = {
-            "instanceName": INSTANCE,
-            "qrcode": True,
-            "integration": "WHATSAPP-BAILEYS",
-        }
-        create_r = requests.post(f"{EVOLUTION_URL}/instance/create", json=payload, headers=headers, timeout=15)
+            # Instance exists but disconnected → logout to reset Baileys, then get QR
+            requests.delete(
+                f"{EVOLUTION_URL}/instance/logout/{INSTANCE}",
+                headers=headers, timeout=10,
+            )
+            time.sleep(3)
+            connect_r = requests.get(
+                f"{EVOLUTION_URL}/instance/connect/{INSTANCE}",
+                headers=headers, timeout=15,
+            )
+            connect_data = connect_r.json()
+            b64 = _extract_b64(connect_data)
+            if b64:
+                return {"base64": b64}
+            return {"ok": False, "error": "QR não gerado após logout", "raw": connect_data}
+
+        # Instance does not exist → create it
+        create_r = requests.post(
+            f"{EVOLUTION_URL}/instance/create",
+            json={"instanceName": INSTANCE, "qrcode": True, "integration": "WHATSAPP-BAILEYS"},
+            headers=headers, timeout=15,
+        )
         if create_r.status_code not in (200, 201):
             return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
 
         create_data = create_r.json()
-        # v2 creation response: { instance: {...}, qrcode: { base64, code, pairingCode } }
-        qr = create_data.get("qrcode") or {}
-        b64 = qr.get("base64") or qr.get("code")
+        b64 = _extract_b64(create_data.get("qrcode") or create_data)
         if b64:
             return {"base64": b64}
 
-        # QR not in creation response — wait for Baileys to initialize then fetch via connect
-        time.sleep(4)
-        connect_r = requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
-        connect_data = connect_r.json()
-        b64 = (
-            connect_data.get("base64")
-            or (connect_data.get("qrcode") or {}).get("base64")
-            or connect_data.get("code")
+        # QR not in creation response — wait for Baileys init then fetch
+        time.sleep(5)
+        connect_r = requests.get(
+            f"{EVOLUTION_URL}/instance/connect/{INSTANCE}",
+            headers=headers, timeout=15,
         )
+        connect_data = connect_r.json()
+        b64 = _extract_b64(connect_data)
         if b64:
             return {"base64": b64}
 
