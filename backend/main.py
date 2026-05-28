@@ -11,6 +11,7 @@ import random
 import asyncio
 from datetime import datetime
 
+import time
 import models
 import schemas
 import auth
@@ -1040,7 +1041,19 @@ def connect_whatsapp():
         if b64:
             return {"base64": b64}
 
-        return {"ok": False, "error": "QR não gerado", "raw": create_data}
+        # QR not in creation response — wait for Baileys to initialize then fetch via connect
+        time.sleep(4)
+        connect_r = requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
+        connect_data = connect_r.json()
+        b64 = (
+            connect_data.get("base64")
+            or (connect_data.get("qrcode") or {}).get("base64")
+            or connect_data.get("code")
+        )
+        if b64:
+            return {"base64": b64}
+
+        return {"ok": False, "error": "QR não gerado", "raw": connect_data}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
