@@ -1044,7 +1044,9 @@
                 const poll = setInterval(async () => {
                     tentativas++;
                     try {
-                        const qRes = await fetch(`${API_BASE}/whatsapp/qr`);
+                        const qRes = await fetch(`${API_BASE}/whatsapp/qr`, {
+                            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                        });
                         const qData = await qRes.json();
                         if (qData.base64) {
                             clearInterval(poll);

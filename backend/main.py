@@ -1301,7 +1301,7 @@ async def webhook_evolution(request: Request):
 
     event = payload.get("event", "")
 
-    # Capture QR code delivered by Evolution API
+    # Capture QR code — Evolution API v2 sends either QRCODE_UPDATED or connection.update with qr
     if event in ("qrcode.updated", "QRCODE_UPDATED"):
         qr_data = payload.get("data", {})
         b64 = (
@@ -1310,7 +1310,21 @@ async def webhook_evolution(request: Request):
         )
         if b64:
             _qr_store["base64"] = b64
-            print("[webhook] QR code recebido e armazenado")
+            print("[webhook] QR code recebido via QRCODE_UPDATED")
+        return {"ok": True}
+
+    if event in ("connection.update", "CONNECTION_UPDATE"):
+        data = payload.get("data", {})
+        print(f"[webhook] connection.update: {data}")
+        # Some versions embed QR inside connection.update
+        b64 = (
+            (data.get("qrcode") or {}).get("base64")
+            or data.get("qr")
+            or data.get("base64")
+        )
+        if b64:
+            _qr_store["base64"] = b64
+            print("[webhook] QR code recebido via connection.update")
         return {"ok": True}
 
     if event not in ("messages.upsert", "MESSAGES_UPSERT"):

@@ -23,7 +23,7 @@ services:
 
   # 3. Evolution API (Nova V2)
   evolution:
-    image: evoapicloud/evolution-api:v2.2.0
+    image: evoapicloud/evolution-api:latest
     container_name: evolution_api
     ports:
       - "8080:8080"
