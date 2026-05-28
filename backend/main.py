@@ -1018,6 +1018,33 @@ def _extract_b64(data: dict):
     )
 
 
+def _register_webhook_for_instance(instance_name: str, api_key: str, evolution_url: str):
+    """Register the evolution webhook silently; failures are non-fatal."""
+    import json as _json
+    from config import load_settings
+    try:
+        settings = load_settings()
+        base_url = settings.get("webhook_base_url", "http://localhost:8000")
+        webhook_url = f"{base_url}/webhook/evolution"
+        body = _json.dumps({
+            "webhook": {
+                "url": webhook_url,
+                "enabled": True,
+                "webhookByEvents": False,
+                "webhookBase64": False,
+                "events": ["MESSAGES_UPSERT"],
+            }
+        })
+        requests.post(
+            f"{evolution_url}/webhook/set/{instance_name}",
+            data=body.encode(),
+            headers={"apikey": api_key, "Content-Type": "application/json"},
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
 @app.get("/whatsapp/connect")
 def connect_whatsapp():
     headers = {"apikey": API_KEY}
@@ -1072,6 +1099,9 @@ def connect_whatsapp():
         )
         if create_r.status_code not in (200, 201):
             return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
+
+        # Register webhook automatically after creating the instance
+        _register_webhook_for_instance(INSTANCE, API_KEY, EVOLUTION_URL)
 
         create_data = create_r.json()
         b64 = _extract_b64(create_data.get("qrcode") or create_data)
