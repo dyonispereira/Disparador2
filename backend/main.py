@@ -1013,6 +1013,17 @@ def get_whatsapp_status():
 def connect_whatsapp():
     headers = {"apikey": API_KEY}
     try:
+        # Check if instance exists; create it if not
+        check = requests.get(f"{EVOLUTION_URL}/instance/connectionState/{INSTANCE}", headers=headers, timeout=5)
+        if check.status_code == 404:
+            payload = {
+                "instanceName": INSTANCE,
+                "qrcode": True,
+                "integration": "WHATSAPP-BAILEYS",
+            }
+            create_r = requests.post(f"{EVOLUTION_URL}/instance/create", json=payload, headers=headers, timeout=10)
+            if create_r.status_code not in (200, 201):
+                return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
         r = requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
         return r.json()
     except Exception as e:
