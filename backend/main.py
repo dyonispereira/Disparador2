@@ -1036,21 +1036,26 @@ def connect_whatsapp():
             if instance_state == "open":
                 return {"connected": True, "state": "open"}
 
-            # Instance exists but disconnected → logout to reset Baileys, then get QR
+            # Instance exists but disconnected → logout to reset Baileys, then poll for QR
             requests.delete(
                 f"{EVOLUTION_URL}/instance/logout/{INSTANCE}",
                 headers=headers, timeout=10,
             )
-            time.sleep(3)
-            connect_r = requests.get(
-                f"{EVOLUTION_URL}/instance/connect/{INSTANCE}",
-                headers=headers, timeout=15,
-            )
-            connect_data = connect_r.json()
-            b64 = _extract_b64(connect_data)
-            if b64:
-                return {"base64": b64}
-            return {"ok": False, "error": "QR não gerado após logout", "raw": connect_data}
+            time.sleep(2)
+            # Poll up to 8 times (every 2s = up to 16s) waiting for QR
+            last_raw = {}
+            for _ in range(8):
+                connect_r = requests.get(
+                    f"{EVOLUTION_URL}/instance/connect/{INSTANCE}",
+                    headers=headers, timeout=15,
+                )
+                connect_data = connect_r.json()
+                b64 = _extract_b64(connect_data)
+                if b64:
+                    return {"base64": b64}
+                last_raw = connect_data
+                time.sleep(2)
+            return {"ok": False, "error": "QR não gerado após logout", "raw": last_raw}
 
         # Instance does not exist → create it
         create_r = requests.post(
