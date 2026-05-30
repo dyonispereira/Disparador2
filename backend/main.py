@@ -180,6 +180,31 @@ EVOLUTION_URL = os.getenv("EVOLUTION_API_URL", "http://127.0.0.1:8080")
 API_KEY       = os.getenv("EVOLUTION_API_KEY", "ev_api_123456_mt_local")
 INSTANCE      = os.getenv("EVOLUTION_INSTANCE", "minha_instancia")
 
+
+def _normalizar_telefone(raw: str) -> str | None:
+    """
+    Normaliza telefone para formato brasileiro com DDI 55.
+    Detecta notação científica do Excel (ex: 5,57E+12 → 5567991879095).
+    Retorna None se o número for claramente inválido.
+    """
+    raw = (raw or "").strip().replace(",", ".")
+    # Detecta notação científica: 5.57E+12, 5,57E+12
+    if "E" in raw.upper() and ("+" in raw or "-" in raw):
+        try:
+            phone = str(int(float(raw)))
+        except Exception:
+            return None
+    else:
+        phone = re.sub(r'\D', '', raw)
+    if not phone:
+        return None
+    if len(phone) in [10, 11]:
+        phone = "55" + phone
+    # Número deve ter 12 ou 13 dígitos (55 + DDD + número)
+    if len(phone) < 12 or len(phone) > 13:
+        return None
+    return phone
+
 # In-memory QR store — populated by QRCODE_UPDATED webhook event
 _qr_store: dict = {"base64": None}
 
@@ -872,20 +897,13 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
                 if status_planilha not in ["pendente", "enviado", "falhou"]:
                     status_planilha = "pendente"
 
-                # Remove tudo que não for número (espaços, traços, parênteses, etc)
-                phone = re.sub(r'\D', '', phone_raw)
-                
-                # Pula linhas que não possuem um telefone válido (ex: cabeçalhos como "nome", "telefone")
+                phone = _normalizar_telefone(phone_raw)
                 if not phone:
+                    ignorados += 1
                     continue
-                    
-                # Se o número tiver 10 ou 11 dígitos, adiciona automaticamente o código do Brasil (55)
-                if len(phone) in [10, 11]:
-                    phone = f"55{phone}"
 
                 exists = db.query(models.Lead).filter(models.Lead.phone == phone).first()
                 if exists:
-                    # Se o lead já existe, atualiza o status dele para sincronizar com a planilha importada
                     exists.status = status_planilha
                     continue
 
@@ -907,7 +925,8 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
 
         return {
             "ok": True,
-            "created": created
+            "created": created,
+            "ignorados": ignorados,
         }
 
     except HTTPException: # Re-raise HTTPExceptions explicitly created

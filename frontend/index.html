@@ -1454,7 +1454,11 @@
             try {
                 const res = await fetch(`${API_BASE}/upload-leads-file`, { method: "POST", body: formData });
                 const data = await res.json();
-                if (res.ok) { alert(`${data.created} leads importados com sucesso!`); carregarLeads(); fileInput.value = ""; }
+                if (res.ok) {
+                    let msg = `✅ ${data.created} lead(s) importado(s) com sucesso!`;
+                    if (data.ignorados) msg += `\n⚠️ ${data.ignorados} linha(s) ignorada(s) por telefone inválido (verifique se a coluna de telefone está formatada como TEXTO no Excel).`;
+                    alert(msg); carregarLeads(); fileInput.value = "";
+                }
                 else { alert(`Falha ao importar: ${data.detail || 'Verifique o formato do arquivo.'}`); }
             } catch (_) { alert("Erro ao fazer upload do CSV."); }
         });
