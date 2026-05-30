@@ -354,7 +354,7 @@ def _create_meet_and_confirm(conv, lead, db, settings):
     date_label = f"{_fmt_date(d)} ({d.strftime('%d/%m')})"
 
     ativos = db.query(Participante).filter(Participante.ativo == True).all()
-    emails = [p.email for p in ativos]
+    emails = list({p.email for p in ativos} | set(settings.get("default_meet_emails", [])))
 
     # ID do calendário compartilhado da empresa (cria o evento diretamente nele)
     calendar_id = settings.get("company_calendar_email", "").strip() or "primary"

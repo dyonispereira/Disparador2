@@ -13,9 +13,16 @@ DEFAULT_SETTINGS = {
     "company_name": "Nossa Empresa",
     "seller_name": "Equipe de Vendas",
     "company_calendar_email": "",
+    "default_meet_emails": [],
     "gemini_api_key": "",
     "gemini_api_keys": [],
     "bot_persona": "",
+    # Email SMTP
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_email": "",
+    "smtp_password": "",
+    "smtp_nome_remetente": "Carlos - GestorPec",
     # Facebook Lead Ads
     "fb_verify_token": "",
     "fb_page_access_token": "",
