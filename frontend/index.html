@@ -568,6 +568,16 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1">
+                    <i class="fa-solid fa-rotate text-purple-400 mr-1"></i>
+                    Chaves extras (rotação automática)
+                    <span class="text-xs text-slate-400 ml-2">Uma por linha — usadas quando a principal atinge o limite</span>
+                </label>
+                <textarea id="cfg-gemini-keys-extra" rows="4"
+                    class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
+                    placeholder="AIzaSy...&#10;AIzaSy...&#10;AIzaSy..."></textarea>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">
                     <i class="fa-solid fa-id-card text-purple-400 mr-1"></i>
                     Perfil do Bot (Persona)
                     <span class="text-xs text-slate-400 ml-2">Quem é o bot, tom de voz, objeções, estratégia de conversa</span>
@@ -1518,6 +1528,7 @@
                 document.getElementById('cfg-vendor-group').value      = s.vendor_group_jid        || '';
                 document.getElementById('cfg-company-calendar').value = s.company_calendar_email || '';
                 document.getElementById('cfg-gemini-key').value       = s.gemini_api_key || '';
+                document.getElementById('cfg-gemini-keys-extra').value = (s.gemini_api_keys || []).join('\n');
                 document.getElementById('cfg-bot-persona').value      = s.bot_persona    || '';
                 document.getElementById('cfg-times').value             = (s.available_times || []).join('\n');
                 // Facebook Lead Ads
@@ -1553,6 +1564,7 @@
                 vendor_group_jid:       document.getElementById('cfg-vendor-group').value.trim(),
                 company_calendar_email: document.getElementById('cfg-company-calendar').value.trim().toLowerCase(),
                 gemini_api_key:         document.getElementById('cfg-gemini-key').value.trim(),
+                gemini_api_keys:        document.getElementById('cfg-gemini-keys-extra').value.split('\n').map(k=>k.trim()).filter(Boolean),
                 bot_persona:            document.getElementById('cfg-bot-persona').value.trim(),
                 available_times:        times,
                 // Facebook Lead Ads

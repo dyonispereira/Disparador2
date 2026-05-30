@@ -52,6 +52,21 @@ def _resolve_index(value, options: list):
     return None
 
 
+_key_index = 0  # rotação global entre chaves
+
+
+def _get_all_keys(settings: dict) -> list:
+    keys = []
+    primary = settings.get("gemini_api_key", "").strip()
+    if primary:
+        keys.append(primary)
+    for k in settings.get("gemini_api_keys", []):
+        k = k.strip()
+        if k and k not in keys:
+            keys.append(k)
+    return keys
+
+
 def ask_gemini(conv, lead, user_message: str, settings: dict,
                audio_data: str = None, audio_mime: str = None):
     """
@@ -67,8 +82,9 @@ def ask_gemini(conv, lead, user_message: str, settings: dict,
         cancelled     -> lead wants to quit  (value="no")
         clarify       -> couldn't understand (value=null)
     """
-    api_key = settings.get("gemini_api_key", "").strip()
-    if not api_key:
+    global _key_index
+    keys = _get_all_keys(settings)
+    if not keys:
         return None
 
     try:
@@ -77,7 +93,29 @@ def ask_gemini(conv, lead, user_message: str, settings: dict,
         print("[AI] Instale: pip install google-generativeai")
         return None
 
-    genai.configure(api_key=api_key)
+    # Tenta cada chave em rotação a partir do índice actual
+    working_key = None
+    for i in range(len(keys)):
+        candidate = keys[(_key_index + i) % len(keys)]
+        try:
+            genai.configure(api_key=candidate)
+            genai.GenerativeModel("gemini-2.0-flash").count_tokens("ok")
+            working_key = candidate
+            _key_index = (_key_index + i) % len(keys)
+            break
+        except Exception as e:
+            if "429" in str(e) or "quota" in str(e).lower() or "Resource" in str(e):
+                print(f"[AI] Chave {i+1}/{len(keys)} com quota esgotada, tentando próxima...")
+                continue
+            working_key = candidate
+            _key_index = (_key_index + i) % len(keys)
+            break
+
+    if not working_key:
+        print("[AI] Todas as chaves Gemini com quota esgotada")
+        return None
+
+    genai.configure(api_key=working_key)
 
     days  = _next_business_days(5)
     times = settings.get("available_times", ["09:00","10:00","11:00","14:00","15:00","16:00","17:00"])

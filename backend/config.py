@@ -14,6 +14,7 @@ DEFAULT_SETTINGS = {
     "seller_name": "Equipe de Vendas",
     "company_calendar_email": "",
     "gemini_api_key": "",
+    "gemini_api_keys": [],
     "bot_persona": "",
     # Facebook Lead Ads
     "fb_verify_token": "",
