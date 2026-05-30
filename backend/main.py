@@ -1083,7 +1083,10 @@ async def send(
     if not templates:
         raise HTTPException(status_code=400, detail="Nenhuma mensagem cadastrada para o disparo.")
 
-    leads = db.query(models.Lead).filter(models.Lead.status != "enviado").all()
+    leads = db.query(models.Lead).filter(
+        models.Lead.status != "enviado",
+        models.Lead.origem_lead == "Planilha CSV"
+    ).all()
     if not leads:
         return {"ok": True, "iniciado": False, "total": 0, "message": "Nenhum lead pendente."}
 
