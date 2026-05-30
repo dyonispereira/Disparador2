@@ -1433,11 +1433,11 @@
         }
 
         async function limparLeads() {
-            if (!confirm("Tem certeza que deseja APAGAR TODOS os leads? Esta ação não pode ser desfeita.")) return;
+            if (!confirm("Limpar todos os leads da lista de disparo (CSV)?\n\nLeads que já estão no Funil CRM não serão excluídos.")) return;
             try {
-                const res = await fetch(`${API_BASE}/leads`, { method: "DELETE" });
-                if (res.ok) { alert("Todos os leads foram apagados!"); carregarLeads(); }
-                else { alert("Erro ao limpar banco de dados."); }
+                const res = await fetch(`${API_BASE}/leads?source=csv`, { method: "DELETE" });
+                if (res.ok) { await carregarLeads(); }
+                else { alert("Erro ao limpar lista."); }
             } catch (_) { alert("Erro de conexão ao tentar limpar."); }
         }
 

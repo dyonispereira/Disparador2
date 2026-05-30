@@ -572,16 +572,33 @@ def delete_lead(lead_id: int, db: Session = Depends(get_db)):
 
 
 @app.delete("/leads")
-def delete_all_leads(db: Session = Depends(get_db)):
+def delete_all_leads(source: str = None, db: Session = Depends(get_db)):
     try:
-        db.query(models.Message).delete()
-        db.query(models.LeadObs).delete()
-        db.query(models.Lead).delete()
+        if source == "csv":
+            # Remove CSV leads: se está no CRM (board_id), apenas limpa a origem; senão, deleta
+            csv_no_crm = [l.id for l in db.query(models.Lead).filter(
+                models.Lead.origem_lead == "Planilha CSV",
+                models.Lead.board_id == None
+            ).all()]
+            if csv_no_crm:
+                db.query(models.LeadObs).filter(models.LeadObs.lead_id.in_(csv_no_crm)).delete(synchronize_session=False)
+                db.query(models.Message).filter(models.Message.lead_id.in_(csv_no_crm)).delete(synchronize_session=False)
+                db.query(models.Lead).filter(models.Lead.id.in_(csv_no_crm)).delete(synchronize_session=False)
+            # Leads CSV que já estão no CRM: só remove a marcação de origem
+            for l in db.query(models.Lead).filter(
+                models.Lead.origem_lead == "Planilha CSV",
+                models.Lead.board_id != None
+            ).all():
+                l.origem_lead = None
+        else:
+            db.query(models.Message).delete()
+            db.query(models.LeadObs).delete()
+            db.query(models.Lead).delete()
         db.commit()
-        return {"ok": True, "message": "Banco de dados limpo com sucesso!"}
+        return {"ok": True}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro ao limpar banco: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao limpar: {str(e)}")
 
 # =========================
 # KANBAN CRM — QUADROS
