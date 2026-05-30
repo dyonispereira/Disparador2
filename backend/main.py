@@ -1077,16 +1077,20 @@ async def send(
     background_tasks: BackgroundTasks,
     campaign_name: str = Form(...),
     file: UploadFile = File(None),
+    lead_ids: str = Form(None),
     db: Session = Depends(get_db)
 ):
     templates = db.query(models.MessageTemplate).all()
     if not templates:
         raise HTTPException(status_code=400, detail="Nenhuma mensagem cadastrada para o disparo.")
 
-    leads = db.query(models.Lead).filter(
-        models.Lead.status != "enviado",
-        models.Lead.origem_lead == "Planilha CSV"
-    ).all()
+    q = db.query(models.Lead).filter(models.Lead.origem_lead == "Planilha CSV")
+    if lead_ids:
+        ids = [int(i) for i in lead_ids.split(',') if i.strip().isdigit()]
+        q = q.filter(models.Lead.id.in_(ids))
+    else:
+        q = q.filter(models.Lead.status != "enviado")
+    leads = q.all()
     if not leads:
         return {"ok": True, "iniciado": False, "total": 0, "message": "Nenhum lead pendente."}
 

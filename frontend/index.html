@@ -165,28 +165,45 @@
         <!-- Coluna Direita: Leads -->
         <div class="md:col-span-2">
             <div class="bg-white rounded-lg shadow-sm border border-slate-200 h-full flex flex-col">
-                <div class="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
-                    <h2 class="text-lg font-bold"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>Lista de Leads</h2>
-                    <div class="flex items-center gap-3">
-                        <button onclick="abrirModalNovoCard('Novo Lead')"
-                            class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
-                            <i class="fa-solid fa-plus"></i> Novo Lead
+                <div class="p-4 border-b bg-slate-50 rounded-t-lg space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-bold"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>Lista de Leads <span id="leads-count" class="text-sm font-normal text-slate-400"></span></h2>
+                        <div class="flex items-center gap-2">
+                            <button onclick="limparLeads()" class="text-red-400 hover:text-red-600 transition" title="Limpar Toda a Lista"><i class="fa-solid fa-trash"></i></button>
+                            <button onclick="carregarLeads()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar"><i class="fa-solid fa-arrows-rotate"></i></button>
+                        </div>
+                    </div>
+                    <!-- Filtros e ações -->
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <label class="text-xs font-semibold text-slate-500">DISPARO REALIZADO:</label>
+                        <select id="filtro-disparo" onchange="renderLeads()"
+                            class="border border-slate-300 rounded-md px-2 py-1 text-xs bg-white focus:ring-1 focus:ring-indigo-400 outline-none">
+                            <option value="">Todos</option>
+                            <option value="nao">Não</option>
+                            <option value="sim">Sim</option>
+                            <option value="falhou">Falhou</option>
+                        </select>
+                        <button onclick="selecionarTodosFiltrados()"
+                            class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg transition">
+                            <i class="fa-solid fa-check-double mr-1"></i>Selecionar Todos
                         </button>
-                        <button onclick="limparLeads()" class="text-red-400 hover:text-red-600 transition" title="Limpar Toda a Lista"><i class="fa-solid fa-trash"></i></button>
-                        <button onclick="carregarLeads()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar"><i class="fa-solid fa-arrows-rotate"></i></button>
+                        <button onclick="dispararSelecionados()" id="btn-disparar-selecionados"
+                            class="hidden text-xs bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-1.5 rounded-lg transition">
+                            <i class="fa-solid fa-rocket mr-1"></i>Disparar Selecionados (<span id="qtd-selecionados">0</span>)
+                        </button>
                     </div>
                 </div>
                 <div class="flex-1 p-0 overflow-x-auto">
                     <table class="w-full text-left text-sm text-slate-600">
                         <thead class="bg-slate-100 text-slate-700 uppercase">
                             <tr>
-                                <th class="px-6 py-3 font-semibold">ID</th>
-                                <th class="px-6 py-3 font-semibold">Nome</th>
-                                <th class="px-6 py-3 font-semibold">Telefone</th>
-                                <th class="px-6 py-3 font-semibold text-center">Status</th>
-                                <th class="px-6 py-3 font-semibold">Última Mensagem</th>
-                                <th class="px-6 py-3 font-semibold">Data</th>
-                                <th class="px-6 py-3 font-semibold">Campanha</th>
+                                <th class="px-3 py-3"><input type="checkbox" id="check-all" onchange="toggleCheckAll(this)"></th>
+                                <th class="px-4 py-3 font-semibold">Nome</th>
+                                <th class="px-4 py-3 font-semibold">Telefone</th>
+                                <th class="px-4 py-3 font-semibold text-center">Disparo Realizado</th>
+                                <th class="px-4 py-3 font-semibold">Última Mensagem</th>
+                                <th class="px-4 py-3 font-semibold">Data</th>
+                                <th class="px-4 py-3 font-semibold">Campanha</th>
                             </tr>
                         </thead>
                         <tbody id="leads-body" class="divide-y divide-slate-200">
@@ -1289,35 +1306,130 @@
         // ──────────────────────────────────────────
         // 2. LEADS
         // ──────────────────────────────────────────
+        let _allLeads = [];
+        let _selectedLeads = new Set();
+
         async function carregarLeads() {
             try {
                 const res = await fetch(`${API_BASE}/leads?source=csv`);
-                const leads = await res.json();
-                const tbody = document.getElementById('leads-body');
-                if (leads.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Nenhum lead encontrado.</td></tr>`;
-                    return;
-                }
-                tbody.innerHTML = '';
-                leads.forEach(lead => {
-                    const sentAt = lead.sent_at
-                        ? new Date(lead.sent_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
-                        : '-';
-                    const campaignBadge = lead.campaign_name
-                        ? `<span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-semibold">${lead.campaign_name}</span>`
-                        : '-';
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-slate-50 transition">
-                            <td class="px-6 py-4 border-b border-slate-100">${lead.id}</td>
-                            <td class="px-6 py-4 border-b border-slate-100 font-medium">${lead.name || '-'}</td>
-                            <td class="px-6 py-4 border-b border-slate-100">${lead.phone}</td>
-                            <td class="px-6 py-4 border-b border-slate-100 text-center">${getStatusBadge(lead.status)}</td>
-                            <td class="px-6 py-4 border-b border-slate-100 text-slate-500 truncate max-w-xs" title="${lead.sent_message || ''}">${lead.sent_message || 'Sem envio'}</td>
-                            <td class="px-6 py-4 border-b border-slate-100 text-slate-500">${sentAt}</td>
-                            <td class="px-6 py-4 border-b border-slate-100">${campaignBadge}</td>
-                        </tr>`;
-                });
+                _allLeads = await res.json();
+                _selectedLeads.clear();
+                renderLeads();
             } catch (e) { console.error("Erro ao carregar leads:", e); }
+        }
+
+        function _disparadoBadge(status) {
+            if (status === 'enviado') return '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Sim</span>';
+            if (status === 'falhou')  return '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">Falhou</span>';
+            return '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-xs font-bold">Não</span>';
+        }
+
+        function renderLeads() {
+            const filtro = document.getElementById('filtro-disparo')?.value || '';
+            let leads = _allLeads;
+            if (filtro === 'sim')    leads = leads.filter(l => l.status === 'enviado');
+            if (filtro === 'nao')    leads = leads.filter(l => l.status !== 'enviado' && l.status !== 'falhou');
+            if (filtro === 'falhou') leads = leads.filter(l => l.status === 'falhou');
+
+            const countEl = document.getElementById('leads-count');
+            if (countEl) countEl.textContent = `(${leads.length})`;
+
+            const tbody = document.getElementById('leads-body');
+            if (!leads.length) {
+                tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-slate-400">Nenhum lead encontrado.</td></tr>`;
+                _atualizarBtnDisparar();
+                return;
+            }
+            tbody.innerHTML = '';
+            leads.forEach(lead => {
+                const sentAt = lead.sent_at
+                    ? new Date(lead.sent_at).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+                    : '-';
+                const campaign = lead.campaign_name
+                    ? `<span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-semibold">${lead.campaign_name}</span>`
+                    : '-';
+                const checked = _selectedLeads.has(lead.id) ? 'checked' : '';
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition ${_selectedLeads.has(lead.id) ? 'bg-indigo-50' : ''}">
+                        <td class="px-3 py-3 border-b border-slate-100">
+                            <input type="checkbox" ${checked} onchange="toggleLead(${lead.id}, this)">
+                        </td>
+                        <td class="px-4 py-3 border-b border-slate-100 font-medium">${lead.name || '-'}</td>
+                        <td class="px-4 py-3 border-b border-slate-100">${lead.phone}</td>
+                        <td class="px-4 py-3 border-b border-slate-100 text-center">${_disparadoBadge(lead.status)}</td>
+                        <td class="px-4 py-3 border-b border-slate-100 text-slate-500 truncate max-w-xs" title="${lead.sent_message||''}">${lead.sent_message||'Sem envio'}</td>
+                        <td class="px-4 py-3 border-b border-slate-100 text-slate-500 text-xs">${sentAt}</td>
+                        <td class="px-4 py-3 border-b border-slate-100">${campaign}</td>
+                    </tr>`;
+            });
+            _atualizarBtnDisparar();
+        }
+
+        function toggleLead(id, cb) {
+            if (cb.checked) _selectedLeads.add(id); else _selectedLeads.delete(id);
+            _atualizarBtnDisparar();
+        }
+
+        function toggleCheckAll(cb) {
+            const filtro = document.getElementById('filtro-disparo')?.value || '';
+            let leads = _allLeads;
+            if (filtro === 'sim')    leads = leads.filter(l => l.status === 'enviado');
+            if (filtro === 'nao')    leads = leads.filter(l => l.status !== 'enviado' && l.status !== 'falhou');
+            if (filtro === 'falhou') leads = leads.filter(l => l.status === 'falhou');
+            leads.forEach(l => { if (cb.checked) _selectedLeads.add(l.id); else _selectedLeads.delete(l.id); });
+            renderLeads();
+        }
+
+        function selecionarTodosFiltrados() {
+            const filtro = document.getElementById('filtro-disparo')?.value || '';
+            let leads = _allLeads;
+            if (filtro === 'sim')    leads = leads.filter(l => l.status === 'enviado');
+            if (filtro === 'nao')    leads = leads.filter(l => l.status !== 'enviado' && l.status !== 'falhou');
+            if (filtro === 'falhou') leads = leads.filter(l => l.status === 'falhou');
+            leads.forEach(l => _selectedLeads.add(l.id));
+            renderLeads();
+        }
+
+        function _atualizarBtnDisparar() {
+            const btn = document.getElementById('btn-disparar-selecionados');
+            const qtd = document.getElementById('qtd-selecionados');
+            if (!btn) return;
+            if (_selectedLeads.size > 0) {
+                btn.classList.remove('hidden');
+                if (qtd) qtd.textContent = _selectedLeads.size;
+            } else {
+                btn.classList.add('hidden');
+            }
+        }
+
+        async function dispararSelecionados() {
+            const campaignName = document.getElementById('campaign-name').value.trim();
+            if (!campaignName) { alert('Preencha o Nome da Campanha antes de disparar.'); document.getElementById('campaign-name').focus(); return; }
+            if (_selectedLeads.size === 0) { alert('Selecione ao menos um lead.'); return; }
+            if (!confirm(`Disparar para ${_selectedLeads.size} lead(s) selecionado(s)?`)) return;
+
+            const fileInput = document.getElementById('media-file');
+            const formData = new FormData();
+            formData.append('campaign_name', campaignName);
+            formData.append('lead_ids', [..._selectedLeads].join(','));
+            if (fileInput.files.length > 0) formData.append('file', fileInput.files[0]);
+
+            const btn = document.getElementById('btn-disparar-selecionados');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Iniciando...';
+            try {
+                const res = await fetch(`${API_BASE}/send`, { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) { alert(`Erro: ${data.detail || 'Falha.'}`); return; }
+                alert(`🚀 Disparo iniciado!\n\n${data.total} lead(s) serão contactados em background.\n\nRecarregue a lista para ver o progresso.`);
+                _selectedLeads.clear();
+                await carregarLeads();
+            } catch (_) { alert('Erro de conexão.'); }
+            finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-rocket mr-1"></i>Disparar Selecionados (<span id="qtd-selecionados">0</span>)`;
+                _atualizarBtnDisparar();
+            }
         }
 
         async function limparLeads() {
