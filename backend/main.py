@@ -896,7 +896,10 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
 
                 phone = _normalizar_telefone(phone_raw)
                 if not phone:
-                    ignorados += 1
+                    # Só conta como ignorado se havia dígitos (telefone malformado)
+                    # Linhas sem dígitos são cabeçalhos ou linhas em branco
+                    if re.search(r'\d', phone_raw):
+                        ignorados += 1
                     continue
 
                 exists = db.query(models.Lead).filter(models.Lead.phone == phone).first()
