@@ -103,7 +103,19 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
     variants = _phone_variants(phone)
     lead = db.query(Lead).filter(Lead.phone.in_(variants)).first()
     if not lead:
-        return False   # Remetente desconhecido → ignora
+        # Lead desconhecido — cria automaticamente e inicia o fluxo
+        lead = Lead(
+            name=phone,
+            phone=phone,
+            status="pendente",
+            etapa="Novo Lead",
+            board_id=1,
+            origem_lead="WhatsApp",
+        )
+        db.add(lead)
+        db.commit()
+        db.refresh(lead)
+        print(f"[flow] novo lead criado automaticamente via WhatsApp: {phone}")
 
     canonical = lead.phone
     conv = db.query(ConversationState).filter(ConversationState.phone == canonical).first()
