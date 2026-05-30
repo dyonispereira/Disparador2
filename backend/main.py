@@ -553,8 +553,11 @@ def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/leads")
-def get_leads(db: Session = Depends(get_db)):
-    return db.query(models.Lead).all()
+def get_leads(source: str = None, db: Session = Depends(get_db)):
+    q = db.query(models.Lead)
+    if source == "csv":
+        q = q.filter(models.Lead.origem_lead == "Planilha CSV")
+    return q.all()
 
 @app.delete("/leads/{lead_id}")
 def delete_lead(lead_id: int, db: Session = Depends(get_db)):
@@ -844,7 +847,8 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
                     phone=phone,
                     status=status_planilha,
                     etapa="Novo Lead",
-                    board_id=1
+                    board_id=1,
+                    origem_lead="Planilha CSV",
                 )
 
                 db.add(lead)

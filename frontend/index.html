@@ -1291,7 +1291,7 @@
         // ──────────────────────────────────────────
         async function carregarLeads() {
             try {
-                const res = await fetch(`${API_BASE}/leads`);
+                const res = await fetch(`${API_BASE}/leads?source=csv`);
                 const leads = await res.json();
                 const tbody = document.getElementById('leads-body');
                 if (leads.length === 0) {
