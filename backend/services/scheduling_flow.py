@@ -93,8 +93,9 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
         conv.followup_sent = False
         db.commit()
 
-    # Rota para o fluxo AI se a chave Gemini estiver configurada
-    if settings.get("gemini_api_key", "").strip():
+    # Rota para o fluxo AI se qualquer chave Gemini estiver configurada
+    from services.ai_flow import _get_all_keys
+    if _get_all_keys(settings):
         return _handle_with_ai(conv, lead, raw_text, db, settings,
                                audio_data=audio_data, audio_mime=audio_mime)
 
