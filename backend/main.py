@@ -1475,7 +1475,12 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
                                 debug.append(f"    Telefone inválido: {phone_raw}")
                                 ignorados += 1
                                 continue
-                            if db.query(models.Lead).filter(models.Lead.phone == phone).first():
+                            existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
+                            if existing:
+                                # Atualiza data do formulário se disponível
+                                if fb_created and existing.origem_lead == "Facebook":
+                                    existing.created_at = fb_created
+                                    db.commit()
                                 ignorados += 1
                                 continue
                             # Usa data do formulário (UTC) — exibida em Brasília (UTC-3)
