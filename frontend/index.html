@@ -797,7 +797,10 @@
             <h2 class="text-xl font-bold text-slate-800"><i class="fa-solid fa-chart-line text-indigo-500 mr-2"></i>Indicadores de Performance</h2>
             <p class="text-sm text-slate-500 mt-0.5">Visão completa da operação comercial</p>
           </div>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="dash-mes-sel" onchange="carregarDashboard()"
+              class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none">
+            </select>
             <select id="dash-board-sel" onchange="carregarDashboard()"
               class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none">
             </select>
@@ -2193,11 +2196,33 @@
             } catch(e) { console.error('[dash] boards', e); }
         }
 
+        function _dashPopularMeses() {
+            const sel = document.getElementById('dash-mes-sel');
+            if (!sel || sel.options.length > 1) return;
+            const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            const now = new Date();
+            let opts = '<option value="">Todos os períodos</option>';
+            for (let i = 0; i < 13; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const val = `${d.getFullYear()}-${d.getMonth()+1}`;
+                const lbl = `${MESES[d.getMonth()]} ${d.getFullYear()}`;
+                opts += `<option value="${val}"${i===0?' selected':''}>${lbl}</option>`;
+            }
+            sel.innerHTML = opts;
+        }
+
         async function carregarDashboard() {
+            _dashPopularMeses();
             const sel = document.getElementById('dash-board-sel');
             if (sel) _dashBoardId = parseInt(sel.value) || 1;
+            const mesSel = (document.getElementById('dash-mes-sel')?.value || '');
+            let mesParam = '';
+            if (mesSel) {
+                const [ano, mes] = mesSel.split('-');
+                mesParam = `&mes=${mes}&ano=${ano}`;
+            }
             try {
-                const res  = await fetch(`${API_BASE}/dashboard/stats?board_id=${_dashBoardId}`);
+                const res  = await fetch(`${API_BASE}/dashboard/stats?board_id=${_dashBoardId}${mesParam}`);
                 const data = await res.json();
                 _renderDashKPI(data.resumo, data.reunioes);
                 _renderDashFunil(data.funil);

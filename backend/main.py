@@ -359,7 +359,7 @@ def trocar_senha(body: schemas.SenhaUpdate, request: Request, db: Session = Depe
 # DASHBOARD – Indicadores de Performance
 # =========================
 @app.get("/dashboard/stats")
-def get_dashboard_stats(board_id: int = 1, db: Session = Depends(get_db)):
+def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None, db: Session = Depends(get_db)):
     import json as _json
     from sqlalchemy import func, or_
     from datetime import date, timedelta
@@ -368,17 +368,32 @@ def get_dashboard_stats(board_id: int = 1, db: Session = Depends(get_db)):
     week_ago   = datetime.utcnow() - timedelta(days=7)
     month_ago  = datetime.utcnow() - timedelta(days=30)
 
+    # ── Filtro por período (mês/ano) ────────────────────────────
+    period_start = period_end = None
+    if mes and ano:
+        next_m = mes % 12 + 1
+        next_y = ano + (1 if mes == 12 else 0)
+        period_start = datetime(ano, mes, 1)
+        period_end   = datetime(next_y, next_m, 1)
+
+    def _leads_q():
+        q = db.query(func.count(models.Lead.id))
+        if period_start:
+            q = q.filter(models.Lead.created_at >= period_start, models.Lead.created_at < period_end)
+        return q
+
+    def _meetings_q():
+        q = db.query(func.count(models.ScheduledMeeting.id))
+        if period_start:
+            q = q.filter(models.ScheduledMeeting.created_at >= period_start,
+                         models.ScheduledMeeting.created_at < period_end)
+        return q
+
     # ── Totais de leads ─────────────────────────────────────────
-    total       = db.query(func.count(models.Lead.id)).scalar() or 0
-    leads_hoje  = db.query(func.count(models.Lead.id)).filter(
-        func.date(models.Lead.created_at) == today_date
-    ).scalar() or 0
-    leads_semana = db.query(func.count(models.Lead.id)).filter(
-        models.Lead.created_at >= week_ago
-    ).scalar() or 0
-    leads_mes = db.query(func.count(models.Lead.id)).filter(
-        models.Lead.created_at >= month_ago
-    ).scalar() or 0
+    total        = _leads_q().scalar() or 0
+    leads_hoje   = _leads_q().filter(func.date(models.Lead.created_at) == today_date).scalar() or 0
+    leads_semana = _leads_q().filter(models.Lead.created_at >= week_ago).scalar() or 0
+    leads_mes    = _leads_q().filter(models.Lead.created_at >= month_ago).scalar() or 0
 
     # ── Leads que responderam (têm ConversationState) ───────────
     phones_conv = db.query(models.ConversationState.phone)
@@ -460,20 +475,17 @@ def get_dashboard_stats(board_id: int = 1, db: Session = Depends(get_db)):
     por_vendedor.sort(key=lambda x: x["fechados"], reverse=True)
 
     # ── Reuniões ────────────────────────────────────────────────
-    total_reunioes  = db.query(func.count(models.ScheduledMeeting.id)).scalar() or 0
-    confirmadas     = db.query(func.count(models.ScheduledMeeting.id)).filter(
-        models.ScheduledMeeting.status == "confirmado"
-    ).scalar() or 0
-    canceladas      = db.query(func.count(models.ScheduledMeeting.id)).filter(
-        models.ScheduledMeeting.status == "cancelado"
-    ).scalar() or 0
+    total_reunioes  = _meetings_q().scalar() or 0
+    confirmadas     = _meetings_q().filter(models.ScheduledMeeting.status == "confirmado").scalar() or 0
+    canceladas      = _meetings_q().filter(models.ScheduledMeeting.status == "cancelado").scalar() or 0
     taxa_comp = round(confirmadas / total_reunioes * 100, 1) if total_reunioes else 0
 
     # ── Funil de conversão ──────────────────────────────────────
     def _count(*etapas_list):
-        return db.query(func.count(models.Lead.id)).filter(
-            models.Lead.etapa.in_(etapas_list)
-        ).scalar() or 0
+        q = db.query(func.count(models.Lead.id)).filter(models.Lead.etapa.in_(etapas_list))
+        if period_start:
+            q = q.filter(models.Lead.created_at >= period_start, models.Lead.created_at < period_end)
+        return q.scalar() or 0
 
     ETAPAS_POS_CONTATO   = ["Contato Iniciado","Engajado","Ligação Realizada","Apresentação Agendada",
                              "Apresentação Realizada","Proposta","Negociação","Fechado","Grupo Criado",
@@ -1332,10 +1344,13 @@ def update_settings(body: dict, db: Session = Depends(get_db)):
 # =========================
 @app.post("/webhook/send-email")
 async def webhook_send_email(request: Request):
-    import smtplib
+    import smtplib, ssl, sys, io
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     from config import load_settings
+    if hasattr(sys.stdout, 'reconfigure'):
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except Exception: pass
 
     try:
         body = await request.json()
@@ -1372,22 +1387,26 @@ async def webhook_send_email(request: Request):
 </div>
 """
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = assunto
-    msg["From"]    = f"{cfg.get('smtp_nome_remetente', 'GestorPec')} <{smtp_email}>"
-    msg["To"]      = email
-    msg.attach(MIMEText(corpo_html, "html", "utf-8"))
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = assunto
+        msg["From"]    = f"{cfg.get('smtp_nome_remetente', 'GestorPec')} <{smtp_email}>"
+        msg["To"]      = email
+        msg.attach(MIMEText(corpo_html, "html", "utf-8"))
+    except Exception as err:
+        return JSONResponse({"ok": False, "stage": "mime", "error": repr(err)}, status_code=500)
 
     try:
-        with smtplib.SMTP(cfg.get("smtp_host", "smtp.gmail.com"), cfg.get("smtp_port", 587)) as s:
-            s.starttls()
+        ctx = ssl.create_default_context()
+    except Exception as err:
+        return JSONResponse({"ok": False, "stage": "ssl", "error": repr(err)}, status_code=500)
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx) as s:
             s.login(smtp_email, smtp_pass)
-            s.sendmail(smtp_email, email, msg.as_string())
-        print(f"[email] enviado para {email} ✓")
+            s.send_message(msg)
         return {"ok": True}
     except Exception as err:
-        print(f"[email] erro ao enviar para {email}: {err}")
-        return JSONResponse({"ok": False, "error": str(err)}, status_code=500)
+        return JSONResponse({"ok": False, "stage": "smtp", "error": repr(err)}, status_code=500)
 
 
 # =========================
