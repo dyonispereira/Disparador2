@@ -359,7 +359,9 @@ def trocar_senha(body: schemas.SenhaUpdate, request: Request, db: Session = Depe
 # DASHBOARD – Indicadores de Performance
 # =========================
 @app.get("/dashboard/stats")
-def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None, db: Session = Depends(get_db)):
+def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None,
+                        data_inicio: str = None, data_fim: str = None,
+                        db: Session = Depends(get_db)):
     import json as _json
     from sqlalchemy import func, or_
     from datetime import date, timedelta
@@ -368,9 +370,15 @@ def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None, db:
     week_ago   = datetime.utcnow() - timedelta(days=7)
     month_ago  = datetime.utcnow() - timedelta(days=30)
 
-    # ── Filtro por período (mês/ano) ────────────────────────────
+    # ── Filtro por período ──────────────────────────────────────
     period_start = period_end = None
-    if mes and ano:
+    if data_inicio and data_fim:
+        try:
+            period_start = datetime.strptime(data_inicio, "%Y-%m-%d")
+            period_end   = datetime.strptime(data_fim, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            pass
+    elif mes and ano:
         next_m = mes % 12 + 1
         next_y = ano + (1 if mes == 12 else 0)
         period_start = datetime(ano, mes, 1)

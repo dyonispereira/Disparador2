@@ -798,9 +798,15 @@
             <p class="text-sm text-slate-500 mt-0.5">Visão completa da operação comercial</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <select id="dash-mes-sel" onchange="carregarDashboard()"
+            <select id="dash-mes-sel" onchange="_dashOnMesChange()"
               class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none">
             </select>
+            <span class="text-slate-400 text-xs">ou</span>
+            <input type="date" id="dash-dt-inicio" onchange="_dashOnDateChange()"
+              class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none">
+            <span class="text-slate-400 text-xs">até</span>
+            <input type="date" id="dash-dt-fim" onchange="_dashOnDateChange()"
+              class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none">
             <select id="dash-board-sel" onchange="carregarDashboard()"
               class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none">
             </select>
@@ -2211,18 +2217,40 @@
             sel.innerHTML = opts;
         }
 
+        function _dashOnMesChange() {
+            // Limpa datas customizadas ao trocar o mês
+            document.getElementById('dash-dt-inicio').value = '';
+            document.getElementById('dash-dt-fim').value = '';
+            carregarDashboard();
+        }
+
+        function _dashOnDateChange() {
+            // Limpa o seletor de mês ao usar datas customizadas
+            const ini = document.getElementById('dash-dt-inicio').value;
+            const fim = document.getElementById('dash-dt-fim').value;
+            if (ini || fim) document.getElementById('dash-mes-sel').value = '';
+            if (ini && fim) carregarDashboard();
+        }
+
         async function carregarDashboard() {
             _dashPopularMeses();
             const sel = document.getElementById('dash-board-sel');
             if (sel) _dashBoardId = parseInt(sel.value) || 1;
-            const mesSel = (document.getElementById('dash-mes-sel')?.value || '');
-            let mesParam = '';
-            if (mesSel) {
-                const [ano, mes] = mesSel.split('-');
-                mesParam = `&mes=${mes}&ano=${ano}`;
+
+            const dtIni = document.getElementById('dash-dt-inicio')?.value || '';
+            const dtFim = document.getElementById('dash-dt-fim')?.value || '';
+            let periodoParam = '';
+            if (dtIni && dtFim) {
+                periodoParam = `&data_inicio=${dtIni}&data_fim=${dtFim}`;
+            } else {
+                const mesSel = document.getElementById('dash-mes-sel')?.value || '';
+                if (mesSel) {
+                    const [ano, mes] = mesSel.split('-');
+                    periodoParam = `&mes=${mes}&ano=${ano}`;
+                }
             }
             try {
-                const res  = await fetch(`${API_BASE}/dashboard/stats?board_id=${_dashBoardId}${mesParam}`);
+                const res  = await fetch(`${API_BASE}/dashboard/stats?board_id=${_dashBoardId}${periodoParam}`);
                 const data = await res.json();
                 _renderDashKPI(data.resumo, data.reunioes);
                 _renderDashFunil(data.funil);
