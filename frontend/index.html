@@ -894,6 +894,33 @@
             Último disparo: <span id="modal-sent"></span> &nbsp;|&nbsp; Status: <span id="modal-status"></span>
           </div>
 
+          <!-- Origem & Campanha -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1">ORIGEM DO LEAD</label>
+              <select id="modal-origem" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+                <option value="">Desconhecida</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Instagram">Instagram</option>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Site">Site</option>
+                <option value="Indicação">Indicação</option>
+                <option value="Google Ads">Google Ads</option>
+                <option value="Outro">Outro</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1">CUSTO DA CAMPANHA</label>
+              <input id="modal-custo" type="number" step="0.01" min="0" placeholder="R$ 0,00"
+                class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">NOME DA CAMPANHA</label>
+            <input id="modal-campanha" type="text" placeholder="Ex: Campanha Maio 2026"
+              class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+          </div>
+
           <!-- ── Histórico de Interações ── -->
           <div class="border-t border-slate-200 pt-4">
             <div class="flex items-center justify-between mb-3">
@@ -2234,6 +2261,9 @@
             document.getElementById('modal-vendedor').value      = lead.vendedor || '';
             document.getElementById('modal-sent').textContent    = lead.sent_at || '–';
             document.getElementById('modal-status').textContent  = lead.status || '–';
+            document.getElementById('modal-origem').value        = lead.origem_lead || '';
+            document.getElementById('modal-campanha').value      = lead.campaign_name || '';
+            document.getElementById('modal-custo').value         = lead.custo_campanha != null ? lead.custo_campanha : '';
 
             // Preenche select de etapa
             const sel = document.getElementById('modal-etapa');
@@ -2289,6 +2319,9 @@
                     etapa: document.getElementById('modal-etapa').value,
                     status_interesse: _modalInteresse,
                     vendedor: document.getElementById('modal-vendedor').value.trim(),
+                    origem_lead: document.getElementById('modal-origem').value,
+                    campaign_name: document.getElementById('modal-campanha').value.trim(),
+                    custo_campanha: document.getElementById('modal-custo').value || null,
                 })
             });
             fecharModal();
@@ -2330,13 +2363,29 @@
                                     <span class="text-xs font-semibold text-slate-700">${o.autor || 'Anônimo'}</span>
                                     <span class="text-xs text-slate-400 ml-2">${_fmtObsDate(o.created_at)}</span>
                                 </div>
-                                <button onclick="deletarObs(${o.id})"
-                                    class="text-slate-300 hover:text-red-400 transition text-xs opacity-0 group-hover:opacity-100 flex-shrink-0 mt-0.5"
-                                    title="Remover">
-                                    <i class="fa-solid fa-trash-can"></i>
-                                </button>
+                                <div class="flex gap-2 opacity-0 group-hover:opacity-100 flex-shrink-0">
+                                    <button onclick="editarObs(${o.id}, this)"
+                                        class="text-slate-300 hover:text-indigo-500 transition text-xs" title="Editar">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </button>
+                                    <button onclick="deletarObs(${o.id})"
+                                        class="text-slate-300 hover:text-red-400 transition text-xs" title="Remover">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <p class="text-sm text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">${textoEsc}</p>
+                            <div id="obs-view-${o.id}">
+                                <p class="text-sm text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">${textoEsc}</p>
+                            </div>
+                            <div id="obs-edit-${o.id}" class="hidden mt-2">
+                                <textarea class="w-full border border-indigo-300 rounded px-2 py-1 text-sm resize-none focus:ring-1 focus:ring-indigo-400 outline-none" rows="2">${o.texto}</textarea>
+                                <div class="flex gap-2 mt-1">
+                                    <button onclick="salvarEdicaoObs(${o.id})"
+                                        class="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 transition">Salvar</button>
+                                    <button onclick="cancelarEdicaoObs(${o.id})"
+                                        class="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300 transition">Cancelar</button>
+                                </div>
+                            </div>
                         </div>
                     </div>`;
                 }).join('');
@@ -2363,6 +2412,28 @@
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fa-solid fa-plus"></i> Adicionar';
             }
+        }
+
+        function editarObs(obsId, btn) {
+            document.getElementById(`obs-view-${obsId}`).classList.add('hidden');
+            document.getElementById(`obs-edit-${obsId}`).classList.remove('hidden');
+        }
+
+        function cancelarEdicaoObs(obsId) {
+            document.getElementById(`obs-view-${obsId}`).classList.remove('hidden');
+            document.getElementById(`obs-edit-${obsId}`).classList.add('hidden');
+        }
+
+        async function salvarEdicaoObs(obsId) {
+            const textarea = document.querySelector(`#obs-edit-${obsId} textarea`);
+            const texto = textarea.value.trim();
+            if (!texto) return;
+            await fetch(`${API_BASE}/leads/${_modalLeadId}/obs/${obsId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ texto }),
+            });
+            await carregarObs();
         }
 
         async function deletarObs(obsId) {

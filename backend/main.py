@@ -36,6 +36,8 @@ def _run_migrations():
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS status_interesse VARCHAR",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS vendedor VARCHAR",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS board_id INTEGER",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS origem_lead VARCHAR",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS custo_campanha FLOAT",
             """CREATE TABLE IF NOT EXISTS lead_obs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 lead_id INTEGER NOT NULL REFERENCES leads(id),
@@ -533,7 +535,9 @@ def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
     db_lead = models.Lead(
         name=lead.name,
         phone=lead.phone,
-        status="pendente"
+        status="pendente",
+        etapa="Novo Lead",
+        board_id=1,
     )
 
     db.add(db_lead)
@@ -641,6 +645,9 @@ def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
             "sent_at": lead.sent_at.strftime("%d/%m %H:%M") if lead.sent_at else "",
             "obs_count": obs_counts.get(lead.id, 0),
             "created_at": lead.created_at.strftime("%d/%m/%Y") if lead.created_at else "",
+            "origem_lead": lead.origem_lead or "",
+            "campaign_name": lead.campaign_name or "",
+            "custo_campanha": lead.custo_campanha,
         })
     return {"board_id": board_id, "board_nome": board.nome, "etapas": etapas, "board": result}
 
@@ -650,9 +657,11 @@ def update_lead_etapa(lead_id: int, body: dict, db: Session = Depends(get_db)):
     lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
-    for field in ("etapa", "status_interesse", "vendedor", "board_id"):
+    for field in ("etapa", "status_interesse", "vendedor", "board_id", "origem_lead", "campaign_name"):
         if field in body:
             setattr(lead, field, body[field] or None)
+    if "custo_campanha" in body:
+        lead.custo_campanha = float(body["custo_campanha"]) if body["custo_campanha"] not in (None, "", 0, "0") else None
     db.commit()
     return {"ok": True}
 
@@ -677,6 +686,20 @@ def add_lead_obs(lead_id: int, body: schemas.LeadObsCreate, db: Session = Depend
         raise HTTPException(status_code=404, detail="Lead não encontrado")
     obs = models.LeadObs(lead_id=lead_id, texto=body.texto.strip(), autor=(body.autor or "").strip() or None)
     db.add(obs)
+    db.commit()
+    db.refresh(obs)
+    return obs
+
+
+@app.put("/leads/{lead_id}/obs/{obs_id}", response_model=schemas.LeadObsResponse)
+def update_lead_obs(lead_id: int, obs_id: int, body: schemas.LeadObsCreate, db: Session = Depends(get_db)):
+    obs = db.query(models.LeadObs).filter(
+        models.LeadObs.id == obs_id,
+        models.LeadObs.lead_id == lead_id,
+    ).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observação não encontrada")
+    obs.texto = body.texto.strip()
     db.commit()
     db.refresh(obs)
     return obs

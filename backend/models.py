@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -33,6 +33,8 @@ class Lead(Base):
     status_interesse = Column(String, nullable=True)   # quente / morno / frio
     vendedor = Column(String, nullable=True)
     board_id = Column(Integer, nullable=True)
+    origem_lead = Column(String, nullable=True)
+    custo_campanha = Column(Float, nullable=True)
 
     messages = relationship("Message", back_populates="lead")
 
