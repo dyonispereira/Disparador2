@@ -169,11 +169,11 @@
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-bold"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>Lista de Leads <span id="leads-count" class="text-sm font-normal text-slate-400"></span></h2>
                         <div class="flex items-center gap-2">
-                            <a href="/leads/export-csv" target="_blank"
+                            <button onclick="exportarPlanilha()"
                                 class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1"
                                 title="Baixar planilha atualizada com status do disparo">
                                 <i class="fa-solid fa-file-arrow-down"></i> Exportar Planilha
-                            </a>
+                            </button>
                             <button onclick="limparLeads()" class="text-red-400 hover:text-red-600 transition" title="Limpar Toda a Lista"><i class="fa-solid fa-trash"></i></button>
                             <button onclick="carregarLeads()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar"><i class="fa-solid fa-arrows-rotate"></i></button>
                         </div>
@@ -1426,15 +1426,33 @@
                 const res = await fetch(`${API_BASE}/send`, { method: 'POST', body: formData });
                 const data = await res.json();
                 if (!res.ok) { alert(`Erro: ${data.detail || 'Falha.'}`); return; }
-                alert(`🚀 Disparo iniciado!\n\n${data.total} lead(s) serão contactados em background.\n\nRecarregue a lista para ver o progresso.`);
+                alert(`🚀 Disparo iniciado!\n\n${data.total} lead(s) serão contactados em background.\n\nA planilha será baixada automaticamente ao finalizar.`);
                 _selectedLeads.clear();
                 await carregarLeads();
+                const tempoEstimado = Math.min(data.total * 55000, 300000);
+                setTimeout(() => exportarPlanilha(), tempoEstimado);
             } catch (_) { alert('Erro de conexão.'); }
             finally {
                 btn.disabled = false;
                 btn.innerHTML = `<i class="fa-solid fa-rocket mr-1"></i>Disparar Selecionados (<span id="qtd-selecionados">0</span>)`;
                 _atualizarBtnDisparar();
             }
+        }
+
+        async function exportarPlanilha() {
+            try {
+                const res = await fetch(`${API_BASE}/leads/export-csv`);
+                if (!res.ok) { alert('Erro ao exportar planilha.'); return; }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `leads_disparo_${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (_) { alert('Erro ao exportar planilha.'); }
         }
 
         async function limparLeads() {
@@ -1558,10 +1576,13 @@
                 if (!data.iniciado) {
                     alert(data.message || 'Nenhum lead pendente para disparar.');
                 } else {
-                    alert(`🚀 Disparo iniciado!\n\n${data.total} lead(s) serão contactados em background com delays anti-ban.\n\nRecarregue a lista de leads para acompanhar o progresso.`);
+                    alert(`🚀 Disparo iniciado!\n\n${data.total} lead(s) serão contactados em background.\n\nA planilha atualizada será baixada automaticamente quando o disparo finalizar.\nRecarregue a lista de leads para acompanhar o progresso.`);
                     campaignNameInput.value = '';
                     fileInput.value = '';
                     carregarLeads();
+                    // Agenda download da planilha após tempo estimado do disparo
+                    const tempoEstimado = Math.min(data.total * 55000, 300000); // ~55s por lead, máx 5min
+                    setTimeout(() => exportarPlanilha(), tempoEstimado);
                 }
             } catch (_) { alert("Erro ao iniciar o disparo. Verifique a conexão."); }
             finally {
