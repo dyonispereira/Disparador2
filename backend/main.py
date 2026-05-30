@@ -1328,6 +1328,69 @@ def update_settings(body: dict, db: Session = Depends(get_db)):
 
 
 # =========================
+# WEBHOOK – Email pós-captura
+# =========================
+@app.post("/webhook/send-email")
+async def webhook_send_email(request: Request):
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from config import load_settings
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "JSON inválido"}, status_code=400)
+
+    nome  = str(body.get("nome_completo", body.get("nome", ""))).split()[0]
+    email = str(body.get("email", "")).strip()
+
+    if not email:
+        return JSONResponse({"ok": False, "error": "email ausente"}, status_code=400)
+
+    cfg = load_settings()
+    smtp_email = cfg.get("smtp_email", "")
+    smtp_pass  = cfg.get("smtp_password", "")
+
+    if not smtp_email or not smtp_pass:
+        return JSONResponse({"ok": False, "error": "SMTP não configurado"}, status_code=500)
+
+    assunto = "Seu acesso foi liberado"
+    corpo_html = f"""
+<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1a1a1a">
+  <p>Olá <strong>{nome}</strong>,</p>
+  <p>Conforme prometido, aqui está o acesso ao material:</p>
+  <p style="margin:24px 0">
+    <a href="https://drive.google.com/drive/folders/1_veNPyBGrrI1VtiUNElDtBnm1BY8hq-4"
+       style="background:#18b745;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">
+      👉 Acessar material agora
+    </a>
+  </p>
+  <p>Esse conteúdo vai te ajudar a enxergar melhor os números da sua operação.</p>
+  <p>Depois me conta o que achou.</p>
+  <p>Abraço,<br><strong>Carlos</strong><br>GestorPec</p>
+</div>
+"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = assunto
+    msg["From"]    = f"{cfg.get('smtp_nome_remetente', 'GestorPec')} <{smtp_email}>"
+    msg["To"]      = email
+    msg.attach(MIMEText(corpo_html, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP(cfg.get("smtp_host", "smtp.gmail.com"), cfg.get("smtp_port", 587)) as s:
+            s.starttls()
+            s.login(smtp_email, smtp_pass)
+            s.sendmail(smtp_email, email, msg.as_string())
+        print(f"[email] enviado para {email} ✓")
+        return {"ok": True}
+    except Exception as err:
+        print(f"[email] erro ao enviar para {email}: {err}")
+        return JSONResponse({"ok": False, "error": str(err)}, status_code=500)
+
+
+# =========================
 # WEBHOOK – Landing Page Captura → CRM
 # =========================
 @app.post("/webhook/captura-lead")
@@ -1572,8 +1635,8 @@ async def facebook_webhook_lead(request: Request, db: Session = Depends(get_db))
                 continue
             try:
                 r = requests.get(
-                    f"https://graph.facebook.com/v21.0/{leadgen_id}",
-                    params={"access_token": page_token},
+                    f"https://graph.facebook.com/v25.0/{leadgen_id}",
+                    params=_fb_params(page_token, app_secret, {"fields": "field_data,created_time,form_id"}),
                     timeout=10,
                 )
                 lead_data = r.json()
@@ -1605,12 +1668,20 @@ async def facebook_webhook_lead(request: Request, db: Session = Depends(get_db))
                 or fields.get("telefone")  or fields.get("celular")
                 or fields.get("whatsapp")  or ""
             )
-            digits = _re.sub(r"\D", "", phone_raw)
-            if not digits:
-                print(f"[fb] leadgen {leadgen_id} sem telefone — campos: {list(fields.keys())}")
-                results.append({"leadgen_id": leadgen_id, "status": "sem_telefone", "fields": list(fields.keys())})
+            phone = _normalizar_telefone(phone_raw)
+            if not phone:
+                print(f"[fb] leadgen {leadgen_id} telefone inválido '{phone_raw}' — campos: {list(fields.keys())}")
+                results.append({"leadgen_id": leadgen_id, "status": "telefone_invalido"})
                 continue
-            phone = "55" + digits if not digits.startswith("55") else digits
+
+            # Data do formulário
+            fb_time_str = lead_data.get("created_time", "")
+            fb_created = None
+            if fb_time_str:
+                try:
+                    fb_created = datetime.strptime(fb_time_str[:19], "%Y-%m-%dT%H:%M:%S")
+                except Exception:
+                    pass
 
             # Upsert: se o telefone já existe, não duplica
             existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
@@ -1619,12 +1690,14 @@ async def facebook_webhook_lead(request: Request, db: Session = Depends(get_db))
                 results.append({"id": existing.id, "status": "already_exists", "phone": phone})
                 continue
 
-            form_id  = value.get("form_id", "")
-            campaign = f"Facebook Leads · {form_id}" if form_id else "Facebook Leads"
+            form_id  = value.get("form_id", "") or lead_data.get("form_id", "")
+            campaign = f"Facebook · {form_id}" if form_id else "Facebook Leads"
             lead = models.Lead(
                 name=name, phone=phone, status="pendente",
                 etapa="Novo Lead", board_id=1,
                 campaign_name=campaign,
+                origem_lead="Facebook",
+                created_at=fb_created,
             )
             db.add(lead)
             db.commit()
