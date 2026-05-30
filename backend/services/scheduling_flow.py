@@ -11,6 +11,7 @@ States per lead:
 """
 
 import json
+import re
 import requests
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
@@ -265,7 +266,11 @@ def _handle_with_ai(conv, lead, raw_text: str, db, settings,
         conv.updated_at     = datetime.utcnow()
         db.commit()
 
-    # clarify / none → AI message already sent above
+    # clarify in idle/confirmed/cancelled: bot answered the question, now present dates
+    elif action == "clarify" and conv.state in ("idle", "confirmed", "cancelled"):
+        import time as _time
+        _time.sleep(1)
+        _start_flow(conv, lead, db, settings)
 
     return True
 
