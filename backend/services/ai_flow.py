@@ -122,11 +122,13 @@ HORÁRIOS DISPONÍVEIS (índices 0 a {len(times)-1}):
 {times_list}
 
 COMPORTAMENTO OBRIGATÓRIO POR ESTADO:
-- idle / confirmed / cancelled -> use a persona para engajar, provoque a dor, crie curiosidade e apresente as datas para agendar. action=start_flow
+- idle / confirmed / cancelled:
+  * Se o lead fizer uma PERGUNTA, objeção ou comentário (ex: "qual o valor?", "como funciona?", "não tenho tempo") -> responda usando a persona (curto, direto, máx 3 linhas) e termine convidando para uma reunião rápida. action=clarify
+  * Se o lead demonstrar interesse em agendar, disser "oi", "olá", "quero saber mais" ou similar -> engaje com a persona, apresente as datas. action=start_flow
 - awaiting_date  -> identifique qual data o lead quer ("quarta", "dia 28", "opção 3", "próxima semana"). action=date_selected
 - awaiting_time  -> identifique qual horário ("às 15h", "de tarde", "4", "manhã"). action=time_selected
 - awaiting_confirmation -> identifique se confirma (action=confirmed) ou cancela (action=cancelled)
-- Se o lead tiver dúvidas, objeções ou perguntas -> responda usando a persona (curto, direto) e redirecione para o agendamento. action=clarify
+- Se não entender a mensagem -> action=clarify respondendo de forma natural pela persona
 
 REGRAS DO CAMPO "value" (OBRIGATÓRIO):
 - date_selected: ÍNDICE INTEIRO (0 a {len(days)-1}). Ex: 3ª opção = value=2
