@@ -169,6 +169,10 @@
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-bold"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>Lista de Leads <span id="leads-count" class="text-sm font-normal text-slate-400"></span></h2>
                         <div class="flex items-center gap-2">
+                            <a href="/leads/export-csv" target="_blank" title="Exportar planilha atualizada"
+                                class="text-emerald-600 hover:text-emerald-800 transition text-sm">
+                                <i class="fa-solid fa-file-csv"></i>
+                            </a>
                             <button onclick="limparLeads()" class="text-red-400 hover:text-red-600 transition" title="Limpar Toda a Lista"><i class="fa-solid fa-trash"></i></button>
                             <button onclick="carregarLeads()" class="text-slate-500 hover:text-indigo-600 transition" title="Atualizar"><i class="fa-solid fa-arrows-rotate"></i></button>
                         </div>

@@ -559,6 +559,36 @@ def get_leads(source: str = None, db: Session = Depends(get_db)):
         q = q.filter(models.Lead.origem_lead == "Planilha CSV")
     return q.all()
 
+
+@app.get("/leads/export-csv")
+def export_leads_csv(db: Session = Depends(get_db)):
+    from fastapi.responses import StreamingResponse
+    from datetime import timezone, timedelta
+    import io as _io
+    BR_TZ = timezone(timedelta(hours=-3))
+    leads = db.query(models.Lead).filter(models.Lead.origem_lead == "Planilha CSV").all()
+    out = _io.StringIO()
+    w = csv.writer(out, delimiter=";", quoting=csv.QUOTE_ALL)
+    w.writerow(["Nome", "Telefone", "Status", "Mensagem Enviada", "Data Disparo (Brasília)", "Campanha"])
+    for l in leads:
+        if l.status == "enviado":   disp = "Sim"
+        elif l.status == "falhou":  disp = "Falhou"
+        else:                       disp = "Não"
+        if l.sent_at:
+            sent_br = l.sent_at.replace(tzinfo=timezone.utc).astimezone(BR_TZ)
+            sent_str = sent_br.strftime("%d/%m/%Y %H:%M")
+        else:
+            sent_str = ""
+        # Prefixo = para forçar Excel a tratar como texto
+        phone_txt = f'="{l.phone}"' if l.phone else ""
+        w.writerow([l.name or "", phone_txt, disp, l.sent_message or "", sent_str, l.campaign_name or ""])
+    content = "﻿" + out.getvalue()
+    return StreamingResponse(
+        _io.BytesIO(content.encode("utf-8")),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="leads_disparo.csv"'}
+    )
+
 @app.delete("/leads/{lead_id}")
 def delete_lead(lead_id: int, db: Session = Depends(get_db)):
     lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
