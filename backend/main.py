@@ -645,7 +645,7 @@ def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
     etapas = _json.loads(board.etapas)
     result = {e: [] for e in etapas}
     leads  = db.query(models.Lead).filter(
-        (models.Lead.board_id == board_id) | (models.Lead.board_id == None if board_id == 1 else False)
+        models.Lead.board_id == board_id
     ).order_by(models.Lead.created_at.desc()).all()
     obs_counts = dict(
         db.query(models.LeadObs.lead_id, func.count(models.LeadObs.id))
@@ -846,8 +846,6 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
                     name=name,
                     phone=phone,
                     status=status_planilha,
-                    etapa="Novo Lead",
-                    board_id=1,
                     origem_lead="Planilha CSV",
                 )
 

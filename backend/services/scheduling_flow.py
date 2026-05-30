@@ -118,6 +118,12 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
         conv.followup_sent = False
         db.commit()
 
+    # Se o lead ainda não está no funil CRM, adiciona como "Novo Lead"
+    if not lead.board_id:
+        lead.board_id = 1
+        lead.etapa = "Novo Lead"
+        db.commit()
+
     # Rota para o fluxo AI se qualquer chave Gemini estiver configurada
     from services.ai_flow import _get_all_keys
     if _get_all_keys(settings):
