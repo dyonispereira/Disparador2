@@ -1538,23 +1538,21 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
                                 debug.append(f"    Telefone inválido: {phone_raw}")
                                 ignorados += 1
                                 continue
+                            # Data do formulário (antes do check de existência)
+                            fb_time_str = lead_data.get("created_time", "")
+                            fb_created = None
+                            if fb_time_str:
+                                try:
+                                    fb_created = datetime.strptime(fb_time_str[:19], "%Y-%m-%dT%H:%M:%S")
+                                except Exception:
+                                    pass
                             existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
                             if existing:
-                                # Atualiza data do formulário se disponível
                                 if fb_created and existing.origem_lead == "Facebook":
                                     existing.created_at = fb_created
                                     db.commit()
                                 ignorados += 1
                                 continue
-                            # Usa data do formulário (UTC) — exibida em Brasília (UTC-3)
-                            fb_time_str = lead_data.get("created_time", "")
-                            fb_created = None
-                            if fb_time_str:
-                                try:
-                                    # Facebook formato: 2026-05-30T12:34:56+0000
-                                    fb_created = datetime.strptime(fb_time_str[:19], "%Y-%m-%dT%H:%M:%S")
-                                except Exception:
-                                    fb_created = None
                             db.add(models.Lead(
                                 name=name or phone, phone=phone, status="pendente",
                                 etapa="Novo Lead", board_id=1,
