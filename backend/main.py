@@ -876,6 +876,7 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
         reader = csv.reader(StringIO(decoded, newline=''), delimiter=delimiter)
         created = 0
         ignorados = 0
+        ja_existentes = 0
 
         for row in reader:
             try:
@@ -904,7 +905,10 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
 
                 exists = db.query(models.Lead).filter(models.Lead.phone == phone).first()
                 if exists:
-                    exists.status = status_planilha
+                    if exists.origem_lead == "Planilha CSV":
+                        exists.status = status_planilha
+                    else:
+                        ja_existentes += 1
                     continue
 
                 lead = models.Lead(
@@ -927,6 +931,7 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
             "ok": True,
             "created": created,
             "ignorados": ignorados,
+            "ja_existentes": ja_existentes,
         }
 
     except HTTPException: # Re-raise HTTPExceptions explicitly created

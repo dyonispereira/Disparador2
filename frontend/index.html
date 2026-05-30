@@ -1456,7 +1456,8 @@
                 const data = await res.json();
                 if (res.ok) {
                     let msg = `✅ ${data.created} lead(s) importado(s) com sucesso!`;
-                    if (data.ignorados) msg += `\n\n⚠️ ${data.ignorados} linha(s) ignorada(s) por telefone inválido.\n\nISTO ACONTECE quando o Excel converte o número para notação científica (ex: 5,57E+12).\n\nSOLUÇÃO: No Excel, selecione a coluna de telefone → clique direito → Formatar Células → Texto → salve novamente o CSV.`;
+                    if (data.ja_existentes) msg += `\n\n⚠️ ${data.ja_existentes} lead(s) ignorado(s): telefone já existe no CRM (Funil). Para disparar para esses leads, use a aba Funil CRM ou remova o lead existente antes de importar.`;
+                    if (data.ignorados) msg += `\n\n❌ ${data.ignorados} linha(s) com telefone inválido (notação científica do Excel — formate a coluna como Texto antes de salvar o CSV).`;
                     alert(msg); carregarLeads(); fileInput.value = "";
                 }
                 else { alert(`Falha ao importar: ${data.detail || 'Verifique o formato do arquivo.'}`); }
