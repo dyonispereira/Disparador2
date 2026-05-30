@@ -1021,6 +1021,11 @@
             class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition">
             Cancelar
           </button>
+          <button onclick="excluirLead()"
+            class="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-red-100 transition"
+            title="Excluir lead">
+            <i class="fa-solid fa-trash"></i>
+          </button>
         </div>
       </div>
     </div>
@@ -2436,6 +2441,19 @@
         function fecharModal() {
             document.getElementById('lead-modal').classList.add('hidden');
             _modalLeadId = null;
+        }
+
+        async function excluirLead() {
+            if (!_modalLeadId) return;
+            const nome = document.getElementById('modal-nome').textContent;
+            if (!confirm(`Excluir o lead "${nome}" permanentemente? Esta ação não pode ser desfeita.`)) return;
+            try {
+                const res = await fetch(`${API_BASE}/leads/${_modalLeadId}`, { method: 'DELETE' });
+                if (!res.ok) { alert('Erro ao excluir lead.'); return; }
+                fecharModal();
+                carregarLeads();
+                await carregarKanban();
+            } catch (_) { alert('Erro de conexão.'); }
         }
 
         function setInteresse(val) {

@@ -556,6 +556,18 @@ def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
 def get_leads(db: Session = Depends(get_db)):
     return db.query(models.Lead).all()
 
+@app.delete("/leads/{lead_id}")
+def delete_lead(lead_id: int, db: Session = Depends(get_db)):
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+    db.query(models.LeadObs).filter(models.LeadObs.lead_id == lead_id).delete()
+    db.query(models.Message).filter(models.Message.lead_id == lead_id).delete()
+    db.delete(lead)
+    db.commit()
+    return {"ok": True}
+
+
 @app.delete("/leads")
 def delete_all_leads(db: Session = Depends(get_db)):
     try:
