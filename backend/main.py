@@ -626,7 +626,7 @@ def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
     result = {e: [] for e in etapas}
     leads  = db.query(models.Lead).filter(
         (models.Lead.board_id == board_id) | (models.Lead.board_id == None if board_id == 1 else False)
-    ).all()
+    ).order_by(models.Lead.created_at.desc()).all()
     obs_counts = dict(
         db.query(models.LeadObs.lead_id, func.count(models.LeadObs.id))
         .group_by(models.LeadObs.lead_id)
