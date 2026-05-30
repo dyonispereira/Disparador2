@@ -629,34 +629,43 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">
-                        Token de Verificação
-                        <span class="text-xs text-slate-400 ml-1">— você escolhe</span>
-                    </label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Token de Verificação <span class="text-xs text-slate-400">— você escolhe</span></label>
                     <input id="cfg-fb-verify-token" type="text"
                         class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
                         placeholder="Ex: gestorpec-fb-leads-2024">
-                    <p class="text-xs text-slate-400 mt-1">Qualquer string. Você vai colar esse mesmo valor no painel do Facebook.</p>
+                    <p class="text-xs text-slate-400 mt-1">Cole o mesmo valor no painel do Facebook.</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">
-                        Page Access Token
-                        <span class="text-xs text-slate-400 ml-1">— Meta for Developers</span>
-                    </label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">App ID <span class="text-xs text-slate-400">— Configurações → Básico</span></label>
+                    <input id="cfg-fb-app-id" type="text"
+                        class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
+                        placeholder="123456789012345">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">App Secret <span class="text-xs text-slate-400">— Configurações → Básico</span></label>
+                    <input id="cfg-fb-app-secret" type="password"
+                        class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
+                        placeholder="abc123...">
+                    <p class="text-xs text-slate-400 mt-1">Necessário para "Require App Secret" e para estender o token.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Page Access Token <span class="text-xs text-slate-400">— Graph API Explorer</span></label>
                     <input id="cfg-fb-page-token" type="password"
                         class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
                         placeholder="EAAxxxx...">
-                    <p class="text-xs text-slate-400 mt-1">Token de longa duração da sua Página do Facebook.</p>
+                    <p class="text-xs text-slate-400 mt-1">Token do usuário ou da página.</p>
                 </div>
-                <div class="md:col-span-2">
-                    <label class="block text-sm font-medium text-slate-700 mb-1">
-                        App Secret
-                        <span class="text-xs text-slate-400 ml-1">— opcional, para verificar assinatura</span>
-                    </label>
-                    <input id="cfg-fb-app-secret" type="password"
-                        class="w-full border border-slate-300 rounded-md p-2 text-sm font-mono"
-                        placeholder="deixe em branco se não quiser verificar assinatura">
+            </div>
+            <!-- Estender token -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex items-center justify-between gap-4">
+                <div>
+                    <p class="text-sm font-semibold text-blue-800"><i class="fa-solid fa-rotate mr-1"></i> Estender token para 60 dias</p>
+                    <p class="text-xs text-blue-700 mt-0.5">Salve App ID, App Secret e Token curto antes de clicar. O token longo será salvo automaticamente.</p>
                 </div>
+                <button onclick="estenderTokenFacebook()" id="btn-fb-extend"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition flex-shrink-0">
+                    <i class="fa-solid fa-arrow-up-right-dots mr-1"></i> Estender Token
+                </button>
             </div>
 
             <!-- URL do Webhook gerada automaticamente -->
@@ -1707,6 +1716,7 @@
                 document.getElementById('cfg-times').value             = (s.available_times || []).join('\n');
                 // Facebook Lead Ads
                 document.getElementById('cfg-fb-verify-token').value = s.fb_verify_token      || '';
+                document.getElementById('cfg-fb-app-id').value       = s.fb_app_id            || '';
                 document.getElementById('cfg-fb-page-token').value   = s.fb_page_access_token || '';
                 document.getElementById('cfg-fb-app-secret').value   = s.fb_app_secret        || '';
                 const base = (s.webhook_base_url || '').replace(/\/$/, '');
@@ -1743,6 +1753,7 @@
                 available_times:        times,
                 // Facebook Lead Ads
                 fb_verify_token:      document.getElementById('cfg-fb-verify-token').value.trim(),
+                fb_app_id:            document.getElementById('cfg-fb-app-id').value.trim(),
                 fb_page_access_token: document.getElementById('cfg-fb-page-token').value.trim(),
                 fb_app_secret:        document.getElementById('cfg-fb-app-secret').value.trim(),
             };
@@ -1777,6 +1788,27 @@
                     p.className = 'text-xs text-red-600 mt-2';
                 }
             } catch (_) { alert("Erro ao configurar webhook."); }
+        }
+
+        async function estenderTokenFacebook() {
+            await salvarConfiguracoes();
+            const btn = document.getElementById('btn-fb-extend');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Estendendo...';
+            try {
+                const res = await fetch(`${API_BASE}/facebook/extend-token`, { method: 'POST' });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(`✅ ${data.message}\n\nO novo token já foi salvo automaticamente nas configurações.`);
+                    carregarConfiguracoes();
+                } else {
+                    alert(`❌ Erro: ${data.detail || 'Falha ao estender token'}`);
+                }
+            } catch (_) { alert('Erro de conexão.'); }
+            finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-arrow-up-right-dots mr-1"></i> Estender Token';
+            }
         }
 
         async function importarLeadsFacebook() {

@@ -20,6 +20,7 @@ DEFAULT_SETTINGS = {
     "fb_verify_token": "",
     "fb_page_access_token": "",
     "fb_app_secret": "",
+    "fb_app_id": "",
 }
 
 

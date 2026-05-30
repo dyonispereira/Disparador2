@@ -1351,12 +1351,51 @@ async def webhook_captura_lead(request: Request, db: Session = Depends(get_db)):
 # =========================
 # IMPORTAR TODOS OS LEADS DO FACEBOOK
 # =========================
+
+def _fb_params(token: str, app_secret: str, extra: dict = None) -> dict:
+    """Monta params com appsecret_proof quando app_secret está configurado."""
+    import hmac, hashlib
+    p = {"access_token": token}
+    if app_secret:
+        proof = hmac.new(app_secret.encode(), token.encode(), hashlib.sha256).hexdigest()
+        p["appsecret_proof"] = proof
+    if extra:
+        p.update(extra)
+    return p
+
+
+@app.post("/facebook/extend-token")
+def facebook_extend_token():
+    """Converte token curto em token de longa duração (60 dias)."""
+    from config import load_settings, save_settings
+    s = load_settings()
+    token      = s.get("fb_page_access_token", "").strip()
+    app_id     = s.get("fb_app_id", "").strip()
+    app_secret = s.get("fb_app_secret", "").strip()
+    if not all([token, app_id, app_secret]):
+        raise HTTPException(status_code=400, detail="Configure Page Access Token, App ID e App Secret antes de estender.")
+    resp = requests.get("https://graph.facebook.com/v25.0/oauth/access_token", params={
+        "grant_type": "fb_exchange_token",
+        "client_id": app_id,
+        "client_secret": app_secret,
+        "fb_exchange_token": token,
+    }, timeout=15).json()
+    if "error" in resp:
+        raise HTTPException(status_code=400, detail=resp["error"].get("message", "Erro ao estender token"))
+    new_token = resp.get("access_token", "")
+    expires_in = resp.get("expires_in", 0)
+    s["fb_page_access_token"] = new_token
+    save_settings(s)
+    days = expires_in // 86400 if expires_in else 60
+    return {"ok": True, "expires_in_days": days, "message": f"Token estendido com sucesso! Válido por ~{days} dias."}
+
+
 @app.post("/facebook/import-all-leads")
 def facebook_import_all_leads(db: Session = Depends(get_db)):
-    """Busca todos os leads de todos os formulários da Página e importa para o CRM."""
     from config import load_settings
     s = load_settings()
     page_token = s.get("fb_page_access_token", "").strip()
+    app_secret = s.get("fb_app_secret", "").strip()
     if not page_token:
         raise HTTPException(status_code=400, detail="Page Access Token não configurado")
 
@@ -1365,66 +1404,66 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
     erros = []
 
     try:
-        # Tenta user token (/me/accounts) primeiro; se não tiver páginas, usa como page token direto (/me)
         accounts = requests.get("https://graph.facebook.com/v25.0/me/accounts",
-                                params={"access_token": page_token, "fields": "id,name,access_token"}, timeout=15).json()
+                                params=_fb_params(page_token, app_secret, {"fields": "id,name,access_token"}),
+                                timeout=15).json()
         if accounts.get("data"):
             pages = [{"id": p["id"], "access_token": p["access_token"]} for p in accounts["data"]]
         else:
-            # Page Access Token: /me retorna a própria página
             me_resp = requests.get("https://graph.facebook.com/v25.0/me",
-                                   params={"access_token": page_token, "fields": "id,name"}, timeout=15).json()
+                                   params=_fb_params(page_token, app_secret, {"fields": "id,name"}),
+                                   timeout=15).json()
             if "error" in me_resp:
                 raise HTTPException(status_code=400, detail=f"Token inválido: {me_resp['error'].get('message','')}")
             pages = [{"id": me_resp.get("id", "me"), "access_token": page_token}]
 
         for page in pages:
-            page_id = page.get("id")
+            page_id  = page.get("id")
             page_tok = page.get("access_token", page_token)
 
-            # 2. Busca todos os formulários da página
-            forms_resp = requests.get(f"https://graph.facebook.com/v25.0/{page_id}/leadgen_forms",
-                                      params={"access_token": page_tok, "fields": "id,name"}, timeout=15).json()
+            forms_resp = requests.get(
+                f"https://graph.facebook.com/v25.0/{page_id}/leadgen_forms",
+                params=_fb_params(page_tok, app_secret, {"fields": "id,name"}),
+                timeout=15).json()
             forms = forms_resp.get("data", [])
+            if not forms and "error" in forms_resp:
+                erros.append(f"Página {page_id}: {forms_resp['error'].get('message','')}")
+                continue
 
             for form in forms:
-                form_id = form["id"]
+                form_id   = form["id"]
                 form_name = form.get("name", form_id)
-                next_url = f"https://graph.facebook.com/v25.0/{form_id}/leads"
-                params = {"access_token": page_tok, "fields": "field_data,created_time", "limit": 100}
+                next_url  = f"https://graph.facebook.com/v25.0/{form_id}/leads"
+                p = _fb_params(page_tok, app_secret, {"fields": "field_data,created_time", "limit": 100})
 
                 while next_url:
-                    resp = requests.get(next_url, params=params, timeout=15).json()
-                    params = {}  # params only for first request
+                    resp = requests.get(next_url, params=p, timeout=15).json()
+                    p = {}
                     for lead_data in resp.get("data", []):
                         try:
-                            fields = {f["name"]: f["values"][0] for f in lead_data.get("field_data", []) if f.get("values")}
-                            phone_raw = fields.get("phone_number") or fields.get("phone") or fields.get("telefone") or fields.get("celular") or ""
-                            name = fields.get("full_name") or fields.get("name") or fields.get("nome") or ""
-                            phone = re.sub(r'\D', '', phone_raw)
-                            if len(phone) in [10, 11]:
-                                phone = f"55{phone}"
+                            flds = {f["name"]: f["values"][0] for f in lead_data.get("field_data", []) if f.get("values")}
+                            phone_raw = flds.get("phone_number") or flds.get("phone") or flds.get("telefone") or flds.get("celular") or ""
+                            name      = flds.get("full_name") or flds.get("name") or flds.get("nome") or ""
+                            phone = _normalizar_telefone(phone_raw)
                             if not phone:
                                 ignorados += 1
                                 continue
                             if db.query(models.Lead).filter(models.Lead.phone == phone).first():
                                 ignorados += 1
                                 continue
-                            lead = models.Lead(
-                                name=name or phone,
-                                phone=phone,
-                                status="pendente",
-                                etapa="Novo Lead",
-                                board_id=1,
+                            db.add(models.Lead(
+                                name=name or phone, phone=phone, status="pendente",
+                                etapa="Novo Lead", board_id=1,
                                 campaign_name=f"Facebook · {form_name}",
                                 origem_lead="Facebook",
-                            )
-                            db.add(lead)
+                            ))
                             db.commit()
                             criados += 1
                         except Exception as e:
                             erros.append(str(e))
                     next_url = resp.get("paging", {}).get("next")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar leads do Facebook: {e}")
 
