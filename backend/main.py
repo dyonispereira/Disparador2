@@ -528,14 +528,18 @@ def root():
 # =========================
 @app.post("/leads", response_model=schemas.LeadResponse)
 def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
+    # Normaliza: remove não-dígitos e adiciona DDI 55 se necessário
+    phone = re.sub(r'\D', '', lead.phone)
+    if len(phone) in [10, 11]:
+        phone = f"55{phone}"
 
-    existing = db.query(models.Lead).filter(models.Lead.phone == lead.phone).first()
+    existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
     if existing:
         raise HTTPException(status_code=400, detail="Telefone já cadastrado")
 
     db_lead = models.Lead(
         name=lead.name,
-        phone=lead.phone,
+        phone=phone,
         status="pendente",
         etapa="Novo Lead",
         board_id=1,

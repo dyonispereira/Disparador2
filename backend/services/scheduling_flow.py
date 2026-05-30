@@ -25,15 +25,40 @@ _NO  = {"não", "nao", "n", "no", "cancelar", "cancel", "outro", "mudar", "não 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _phone_variants(phone: str) -> list:
-    """Brazilian numbers: WhatsApp may send 8-digit (556791879095) while DB stores
-    9-digit (5567991879095) or vice versa. Return both variants to search."""
-    variants = [phone]
-    if phone.startswith("55") and len(phone) == 12:
-        # add 9 after area code: 5567XXXXXXXX → 55679XXXXXXXX
-        variants.append(phone[:4] + "9" + phone[4:])
-    elif phone.startswith("55") and len(phone) == 13 and phone[4] == "9":
-        # remove leading 9 from number: 55679XXXXXXXX → 5567XXXXXXXX
-        variants.append(phone[:4] + phone[5:])
+    """Return all plausible DB variants for an incoming WhatsApp phone number.
+    Handles: with/without country code 55, 8-digit vs 9-digit local numbers."""
+    digits = re.sub(r'\D', '', phone)
+    seen = set()
+    variants = []
+
+    def _add(p):
+        if p and p not in seen:
+            seen.add(p)
+            variants.append(p)
+
+    _add(digits)
+
+    if digits.startswith("55") and len(digits) >= 12:
+        no_cc = digits[2:]
+        _add(no_cc)
+        # 12-digit (55+DDD+8): add 9 → 13-digit variant
+        if len(digits) == 12:
+            _add(digits[:4] + "9" + digits[4:])
+            _add(no_cc[:2] + "9" + no_cc[2:])
+        # 13-digit with leading 9 (55+DDD+9+8): remove 9 → 12-digit variant
+        elif len(digits) == 13 and digits[4] == "9":
+            _add(digits[:4] + digits[5:])
+            _add(no_cc[:2] + no_cc[3:])
+    elif not digits.startswith("55") and len(digits) in [10, 11]:
+        with_cc = "55" + digits
+        _add(with_cc)
+        if len(digits) == 10:
+            _add(with_cc[:4] + "9" + with_cc[4:])
+            _add(digits[:2] + "9" + digits[2:])
+        elif len(digits) == 11 and digits[2] == "9":
+            _add(with_cc[:4] + with_cc[5:])
+            _add(digits[:2] + digits[3:])
+
     return variants
 
 
