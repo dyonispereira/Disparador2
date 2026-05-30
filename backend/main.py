@@ -184,18 +184,15 @@ INSTANCE      = os.getenv("EVOLUTION_INSTANCE", "minha_instancia")
 def _normalizar_telefone(raw: str) -> str | None:
     """
     Normaliza telefone para formato brasileiro com DDI 55.
-    Detecta notação científica do Excel (ex: 5,57E+12 → 5567991879095).
-    Retorna None se o número for claramente inválido.
+    Rejeita notação científica do Excel (ex: 5,57E+12) pois perde precisão.
+    Retorna None se o número for inválido.
     """
-    raw = (raw or "").strip().replace(",", ".")
-    # Detecta notação científica: 5.57E+12, 5,57E+12
-    if "E" in raw.upper() and ("+" in raw or "-" in raw):
-        try:
-            phone = str(int(float(raw)))
-        except Exception:
-            return None
-    else:
-        phone = re.sub(r'\D', '', raw)
+    raw = (raw or "").strip()
+    # Rejeita notação científica — número original foi perdido pelo Excel
+    raw_upper = raw.upper().replace(",", ".").replace(" ", "")
+    if "E+" in raw_upper or "E-" in raw_upper:
+        return None
+    phone = re.sub(r'\D', '', raw)
     if not phone:
         return None
     if len(phone) in [10, 11]:

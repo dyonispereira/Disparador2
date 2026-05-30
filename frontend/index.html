@@ -1456,7 +1456,7 @@
                 const data = await res.json();
                 if (res.ok) {
                     let msg = `✅ ${data.created} lead(s) importado(s) com sucesso!`;
-                    if (data.ignorados) msg += `\n⚠️ ${data.ignorados} linha(s) ignorada(s) por telefone inválido (verifique se a coluna de telefone está formatada como TEXTO no Excel).`;
+                    if (data.ignorados) msg += `\n\n⚠️ ${data.ignorados} linha(s) ignorada(s) por telefone inválido.\n\nISTO ACONTECE quando o Excel converte o número para notação científica (ex: 5,57E+12).\n\nSOLUÇÃO: No Excel, selecione a coluna de telefone → clique direito → Formatar Células → Texto → salve novamente o CSV.`;
                     alert(msg); carregarLeads(); fileInput.value = "";
                 }
                 else { alert(`Falha ao importar: ${data.detail || 'Verifique o formato do arquivo.'}`); }
