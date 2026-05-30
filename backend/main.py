@@ -721,8 +721,15 @@ def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
         .group_by(models.LeadObs.lead_id)
         .all()
     )
+    from datetime import timezone as _tz, timedelta as _td
+    BR_TZ = _tz(_td(hours=-3))  # Brasília UTC-3
     for lead in leads:
         etapa = lead.etapa if lead.etapa in result else etapas[0]
+        if lead.created_at:
+            created_br = lead.created_at.replace(tzinfo=_tz.utc).astimezone(BR_TZ)
+            created_str = created_br.strftime("%d/%m/%Y")
+        else:
+            created_str = ""
         result[etapa].append({
             "id": lead.id,
             "name": lead.name or "",
@@ -733,7 +740,7 @@ def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
             "status": lead.status,
             "sent_at": lead.sent_at.strftime("%d/%m %H:%M") if lead.sent_at else "",
             "obs_count": obs_counts.get(lead.id, 0),
-            "created_at": lead.created_at.strftime("%d/%m/%Y") if lead.created_at else "",
+            "created_at": created_str,
             "origem_lead": lead.origem_lead or "",
             "campaign_name": lead.campaign_name or "",
             "custo_campanha": lead.custo_campanha,
@@ -1471,11 +1478,21 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
                             if db.query(models.Lead).filter(models.Lead.phone == phone).first():
                                 ignorados += 1
                                 continue
+                            # Usa data do formulário (UTC) — exibida em Brasília (UTC-3)
+                            fb_time_str = lead_data.get("created_time", "")
+                            fb_created = None
+                            if fb_time_str:
+                                try:
+                                    # Facebook formato: 2026-05-30T12:34:56+0000
+                                    fb_created = datetime.strptime(fb_time_str[:19], "%Y-%m-%dT%H:%M:%S")
+                                except Exception:
+                                    fb_created = None
                             db.add(models.Lead(
                                 name=name or phone, phone=phone, status="pendente",
                                 etapa="Novo Lead", board_id=1,
                                 campaign_name=f"Facebook · {form_name}",
                                 origem_lead="Facebook",
+                                created_at=fb_created,
                             ))
                             db.commit()
                             criados += 1
@@ -1749,7 +1766,9 @@ async def webhook_evolution(request: Request):
             vendor_jid = settings.get("vendor_group_jid", "")
             if vendor_jid:
                 phone_display = phone[2:] if phone.startswith("55") else phone
-                data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+                from datetime import timezone as _tz, timedelta as _td
+                CBA_TZ = _tz(_td(hours=-4))  # Cuiabá/MT UTC-4
+                data_hora = datetime.now(_tz.utc).astimezone(CBA_TZ).strftime("%d/%m/%Y %H:%M")
                 msg_preview = text.strip() if text.strip() else ("🎤 [áudio]" if audio_data else "")
                 alert = (
                     f"\U0001f6a8 *ALERTA COMERCIAL*\n\n"
