@@ -93,29 +93,8 @@ def ask_gemini(conv, lead, user_message: str, settings: dict,
         print("[AI] Instale: pip install google-generativeai")
         return None
 
-    # Tenta cada chave em rotação a partir do índice actual
-    working_key = None
-    for i in range(len(keys)):
-        candidate = keys[(_key_index + i) % len(keys)]
-        try:
-            genai.configure(api_key=candidate)
-            genai.GenerativeModel("gemini-2.0-flash").count_tokens("ok")
-            working_key = candidate
-            _key_index = (_key_index + i) % len(keys)
-            break
-        except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower() or "Resource" in str(e):
-                print(f"[AI] Chave {i+1}/{len(keys)} com quota esgotada, tentando próxima...")
-                continue
-            working_key = candidate
-            _key_index = (_key_index + i) % len(keys)
-            break
-
-    if not working_key:
-        print("[AI] Todas as chaves Gemini com quota esgotada")
-        return None
-
-    genai.configure(api_key=working_key)
+    # Usa a chave actual (rotação acontece no bloco de chamada abaixo)
+    genai.configure(api_key=keys[_key_index % len(keys)])
 
     days  = _next_business_days(5)
     times = settings.get("available_times", ["09:00","10:00","11:00","14:00","15:00","16:00","17:00"])
@@ -187,20 +166,29 @@ RESPONDA SOMENTE JSON válido. Exemplos:
     else:
         content = user_message or "oi"
 
-    for model_name in ("gemini-2.5-flash", "gemini-2.0-flash"):
-        try:
-            model = genai.GenerativeModel(
-                model_name,
-                system_instruction=system,
-                generation_config={"response_mime_type": "application/json", "temperature": 0.3},
-            )
-            response = model.start_chat(history=history).send_message(content)
-            result = json.loads(response.text)
-            if "message" in result and "action" in result:
-                print(f"[AI] {model_name} -> action={result['action']} value={result.get('value')}")
-                return result
-        except Exception as e:
-            print(f"[AI] {model_name} error: {e}")
-            continue
+    for attempt in range(len(keys)):
+        current_key = keys[_key_index % len(keys)]
+        genai.configure(api_key=current_key)
+        for model_name in ("gemini-2.0-flash", "gemini-2.5-flash"):
+            try:
+                model = genai.GenerativeModel(
+                    model_name,
+                    system_instruction=system,
+                    generation_config={"response_mime_type": "application/json", "temperature": 0.3},
+                )
+                response = model.start_chat(history=history).send_message(content)
+                result = json.loads(response.text)
+                if "message" in result and "action" in result:
+                    print(f"[AI] chave {_key_index % len(keys)+1}/{len(keys)} {model_name} -> action={result['action']}")
+                    return result
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "quota" in err.lower() or "Resource" in err:
+                    print(f"[AI] Chave {_key_index % len(keys)+1} quota esgotada, trocando...")
+                    _key_index += 1
+                    break
+                print(f"[AI] {model_name} error: {e}")
+                continue
 
+    print("[AI] Todas as chaves esgotadas ou erro")
     return None
