@@ -135,18 +135,30 @@ def _handle_with_ai(conv, lead, raw_text: str, db, settings,
                     audio_data: str = None, audio_mime: str = None) -> bool:
     from services.ai_flow import ask_gemini
 
-    result = ask_gemini(conv, lead, raw_text, settings,
-                        audio_data=audio_data, audio_mime=audio_mime)
+    try:
+        result = ask_gemini(conv, lead, raw_text, settings,
+                            audio_data=audio_data, audio_mime=audio_mime)
+    except Exception as exc:
+        print(f"[AI] ask_gemini exception — falling back to numeric flow: {exc}")
+        result = None
 
     if not result:
-        # Gemini unavailable — fall back to number-based flow
+        # Gemini unavailable — fall back to full scheduling flow
         text = raw_text.strip().lower()
         if conv.state in ("idle", "confirmed", "cancelled"):
             _start_flow(conv, lead, db, settings)
         elif conv.state == "awaiting_date":
-            _on_date_pick(conv, lead, text, db, settings)
+            # If dates were never offered (state got stuck), restart
+            if not json.loads(conv.offered_dates or "[]"):
+                _start_flow(conv, lead, db, settings)
+            else:
+                _on_date_pick(conv, lead, text, db, settings)
         elif conv.state == "awaiting_time":
-            _on_time_pick(conv, lead, text, db, settings)
+            # If times were never offered (state got stuck), re-ask
+            if not json.loads(conv.offered_times or "[]"):
+                _ask_time(conv, lead, db, settings)
+            else:
+                _on_time_pick(conv, lead, text, db, settings)
         elif conv.state == "awaiting_confirmation":
             _on_confirm(conv, lead, text, db, settings)
         return True

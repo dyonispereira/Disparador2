@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ import base64
 import re
 import random
 import asyncio
+import os as _os
 from datetime import datetime
 
 import time
@@ -855,8 +856,8 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
 # =========================
 @app.post("/import-local-leads")
 def import_local_leads(db: Session = Depends(get_db)):
-    import os
-    file_path = r"C:\Users\Acer\Downloads\Disparador2\dados\leads.csv"
+    _backend_dir = _os.path.dirname(_os.path.abspath(__file__))
+    file_path = _os.path.join(_backend_dir, "..", "dados", "leads.csv")
     
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"Arquivo não encontrado: {file_path}")
@@ -964,138 +965,134 @@ def get_messages(db: Session = Depends(get_db)):
     return db.query(models.Message).all()
 
 # =========================
-# DISPARO (DEBUG COMPLETO)
+# DISPARO
 # =========================
-@app.post("/send")
-async def send(
-    campaign_name: str = Form(...),
-    file: UploadFile = File(None),
-    db: Session = Depends(get_db)
-):
 
+def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
+                 b64_media, mimetype, filename):
+    """Runs in a background thread — sends messages with anti-ban delays."""
+    from config import load_settings
+    settings = load_settings()
+    evo_url  = settings.get("evolution_url", EVOLUTION_URL)
+    api_key  = settings.get("api_key", API_KEY)
+    instance = settings.get("instance", INSTANCE)
+    headers  = {"apikey": api_key, "Content-Type": "application/json"}
+
+    is_image = bool(filename and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')))
+    media_type = "image" if is_image else "document"
+
+    db = SessionLocal()
     try:
-        templates = db.query(models.MessageTemplate).all()
-        if not templates:
-            raise HTTPException(status_code=400, detail="Nenhuma mensagem cadastrada para o disparo.")
+        for i, (lead_id, lead_name, lead_phone) in enumerate(leads_snapshot):
+            lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+            if not lead or lead.status == "enviado":
+                continue
 
-        # Seleciona apenas os leads que ainda não receberam a mensagem
-        leads = db.query(models.Lead).filter(models.Lead.status != "enviado").all()
+            text = re.sub(r'{\s*name\s*}', lead_name or "", random.choice(templates_text), flags=re.IGNORECASE)
+            final_code = 500
 
-        if len(leads) == 0:
-            return {
-                "ok": True,
-                "enviados": 0,
-                "total": 0
-            }
+            try:
+                if b64_media:
+                    order = random.choice(['media_first', 'text_first'])
+                    if order == 'media_first':
+                        r = requests.post(
+                            f"{evo_url}/message/sendMedia/{instance}",
+                            json={"number": lead_phone, "mediatype": media_type, "mimetype": mimetype, "caption": text, "media": b64_media},
+                            headers=headers, timeout=30)
+                        final_code = r.status_code
+                        print(f"[disparo] media_first {lead_phone}: {r.status_code}")
+                    else:
+                        r1 = requests.post(f"{evo_url}/message/sendText/{instance}",
+                                           json={"number": lead_phone, "text": text},
+                                           headers=headers, timeout=15)
+                        time.sleep(random.uniform(2, 8))
+                        r2 = requests.post(
+                            f"{evo_url}/message/sendMedia/{instance}",
+                            json={"number": lead_phone, "mediatype": media_type, "mimetype": mimetype, "media": b64_media},
+                            headers=headers, timeout=30)
+                        final_code = r2.status_code if r1.ok else r1.status_code
+                        print(f"[disparo] text_first {lead_phone}: txt={r1.status_code} media={r2.status_code}")
+                else:
+                    r = requests.post(f"{evo_url}/message/sendText/{instance}",
+                                      json={"number": lead_phone, "text": text},
+                                      headers=headers, timeout=15)
+                    final_code = r.status_code
+                    print(f"[disparo] text_only {lead_phone}: {r.status_code}")
+            except Exception as exc:
+                print(f"[disparo] erro {lead_phone}: {exc}")
+                final_code = 500
 
-        # Prepara a imagem em base64 se ela for enviada
-        b64_media = None
-        mimetype = None
-        if file:
-            content = await file.read()
-            if not content: # Caso o arquivo seja vazio
-                raise HTTPException(status_code=400, detail="O arquivo de mídia está vazio.")
-
-            b64_media = base64.b64encode(content).decode('utf-8') # Converte para base64
-            mimetype = file.content_type
-
-        enviados = 0
-        total = len(leads)
-        headers = {"apikey": API_KEY, "Content-Type": "application/json"}
-
-        for i, lead in enumerate(leads):
-            
-            # 1. Sorteia uma mensagem aleatória
-            chosen_template = random.choice(templates)
-            # Substituição robusta do nome, que remove a tag se o nome for vazio e ignora variações como { name }
-            text = re.sub(r'{\s*name\s*}', lead.name or "", chosen_template.text, flags=re.IGNORECASE)
-            
-            final_status_code = 500  # Assume falha por padrão
-
-            # 2. Lógica de envio com ordem e delays aleatórios
-            if b64_media:
-                order = random.choice(['media_first', 'text_first'])
-                delay_between_parts = random.uniform(2, 8)
-
-                if order == 'media_first':
-                    payload_media = {"number": f"{lead.phone}", "mediatype": "image" if file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')) else "document", "mimetype": mimetype, "caption": text, "media": b64_media}
-                    url_media = f"{EVOLUTION_URL}/message/sendMedia/{INSTANCE}"
-                    r = requests.post(url_media, json=payload_media, headers=headers, timeout=30)
-                    final_status_code = r.status_code
-                    print(f"EVOLUTION (Media First) to {lead.phone}:", r.status_code, r.text)
-                else:  # text_first
-                    payload_text = {"number": f"{lead.phone}", "text": text}
-                    url_text = f"{EVOLUTION_URL}/message/sendText/{INSTANCE}"
-                    r_text = requests.post(url_text, json=payload_text, headers=headers, timeout=15)
-                    print(f"EVOLUTION (Text First - Part 1) to {lead.phone}:", r_text.status_code, r_text.text)
-                    
-                    await asyncio.sleep(delay_between_parts)
-
-                    payload_media = {"number": f"{lead.phone}", "mediatype": "image" if file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')) else "document", "mimetype": mimetype, "media": b64_media}
-                    url_media = f"{EVOLUTION_URL}/message/sendMedia/{INSTANCE}"
-                    r_media = requests.post(url_media, json=payload_media, headers=headers, timeout=30)
-                    print(f"EVOLUTION (Text First - Part 2) to {lead.phone}:", r_media.status_code, r_media.text)
-                    
-                    final_status_code = r_media.status_code if r_text.ok else r_text.status_code
-
-            else:  # Apenas texto
-                payload_text = {"number": f"{lead.phone}", "text": text}
-                url_text = f"{EVOLUTION_URL}/message/sendText/{INSTANCE}"
-                r = requests.post(url_text, json=payload_text, headers=headers, timeout=15)
-                final_status_code = r.status_code
-                print(f"EVOLUTION (Text Only) to {lead.phone}:", r.status_code, r.text)
-
-            # 3. Atualiza o status no banco
-            if 200 <= final_status_code < 300:
-                lead.status = "enviado"
-                enviados += 1
-            else:
-                lead.status = "falhou"
-            
+            lead.status = "enviado" if 200 <= final_code < 300 else "falhou"
             lead.campaign_name = campaign_name
             lead.sent_message = text
             lead.sent_at = datetime.utcnow()
+            db.commit()
 
-            db.commit() # Salva o status de cada lead imediatamente
+            if i < len(leads_snapshot) - 1:
+                delay = random.uniform(20, 90)
+                print(f"[disparo] aguardando {delay:.0f}s...")
+                time.sleep(delay)
 
-            # 4. Delay entre leads (não aplica no último)
-            if i < len(leads) - 1:
-                delay_between_leads = random.uniform(20, 90)
-                print(f"--- Aguardando {delay_between_leads:.2f}s para o próximo lead ---")
-                await asyncio.sleep(delay_between_leads)
-
-        # ==========================================
-        # ATUALIZA A PLANILHA LOCAL APÓS O DISPARO
-        # ==========================================
+        # Atualiza planilha local se existir (path relativo ao backend)
         try:
-            import os
-            output_dir = r"C:\Users\Acer\Downloads\Disparador2\dados"
-            if os.path.exists(output_dir):
-                file_path = os.path.join(output_dir, "leads.csv")
+            _backend_dir = _os.path.dirname(_os.path.abspath(__file__))
+            output_dir = _os.path.join(_backend_dir, "..", "dados")
+            if _os.path.exists(output_dir):
+                file_path = _os.path.join(output_dir, "leads.csv")
                 all_leads = db.query(models.Lead).all()
                 with open(file_path, "w", newline="", encoding="utf-8-sig") as f:
-                    # Usa ponto e vírgula (padrão Excel BR) e força aspas em todos os campos para máxima compatibilidade.
                     writer = csv.writer(f, delimiter=";", quoting=csv.QUOTE_ALL)
-                    writer.writerow(["Nome", "Telefone", "Status", "Mensagem Enviada", "Data Disparo", "Campanha"]) # Recria o cabeçalho
+                    writer.writerow(["Nome", "Telefone", "Status", "Mensagem Enviada", "Data Disparo", "Campanha"])
                     for l in all_leads:
                         sent_at_str = l.sent_at.strftime("%Y-%m-%d %H:%M:%S") if l.sent_at else ""
                         writer.writerow([l.name, l.phone, l.status, l.sent_message, sent_at_str, l.campaign_name])
         except Exception as e:
-            print(f"Erro ao atualizar a planilha local: {e}")
+            print(f"[disparo] erro ao salvar CSV: {e}")
 
-        return {
-            "ok": True,
-            "enviados": enviados,
-            "total": total
-        }
+        print(f"[disparo] campanha '{campaign_name}' finalizada.")
+    finally:
+        db.close()
 
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e),
-            "enviados": 0,
-            "total": 0
-        }
+
+@app.post("/send")
+async def send(
+    background_tasks: BackgroundTasks,
+    campaign_name: str = Form(...),
+    file: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
+    templates = db.query(models.MessageTemplate).all()
+    if not templates:
+        raise HTTPException(status_code=400, detail="Nenhuma mensagem cadastrada para o disparo.")
+
+    leads = db.query(models.Lead).filter(models.Lead.status != "enviado").all()
+    if not leads:
+        return {"ok": True, "iniciado": False, "total": 0, "message": "Nenhum lead pendente."}
+
+    b64_media = None
+    mimetype = None
+    filename = None
+    if file and file.filename:
+        content = await file.read()
+        if content:
+            b64_media = base64.b64encode(content).decode('utf-8')
+            mimetype = file.content_type
+            filename = file.filename
+
+    leads_snapshot = [(l.id, l.name or "", l.phone) for l in leads]
+    templates_text = [t.text for t in templates]
+
+    background_tasks.add_task(
+        _run_disparo,
+        campaign_name, leads_snapshot, templates_text, b64_media, mimetype, filename
+    )
+
+    return {
+        "ok": True,
+        "iniciado": True,
+        "total": len(leads),
+        "message": f"Disparo iniciado para {len(leads)} lead(s). Os envios ocorrem em background com delays anti-ban."
+    }
 
 # =========================
 # CONEXÃO WHATSAPP
@@ -1272,13 +1269,18 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
     erros = []
 
     try:
-        # 1. Busca todas as páginas do token
-        me = requests.get("https://graph.facebook.com/v25.0/me/accounts",
-                          params={"access_token": page_token, "fields": "id,name"}, timeout=15).json()
-        pages = me.get("data", [])
-        if not pages:
-            # Tenta usar o token como page token direto
-            pages = [{"id": "me", "access_token": page_token}]
+        # Tenta user token (/me/accounts) primeiro; se não tiver páginas, usa como page token direto (/me)
+        accounts = requests.get("https://graph.facebook.com/v25.0/me/accounts",
+                                params={"access_token": page_token, "fields": "id,name,access_token"}, timeout=15).json()
+        if accounts.get("data"):
+            pages = [{"id": p["id"], "access_token": p["access_token"]} for p in accounts["data"]]
+        else:
+            # Page Access Token: /me retorna a própria página
+            me_resp = requests.get("https://graph.facebook.com/v25.0/me",
+                                   params={"access_token": page_token, "fields": "id,name"}, timeout=15).json()
+            if "error" in me_resp:
+                raise HTTPException(status_code=400, detail=f"Token inválido: {me_resp['error'].get('message','')}")
+            pages = [{"id": me_resp.get("id", "me"), "access_token": page_token}]
 
         for page in pages:
             page_id = page.get("id")

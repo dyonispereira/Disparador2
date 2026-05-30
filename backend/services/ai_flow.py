@@ -93,9 +93,6 @@ def ask_gemini(conv, lead, user_message: str, settings: dict,
         print("[AI] Instale: pip install google-generativeai")
         return None
 
-    # Usa a chave actual (rotação acontece no bloco de chamada abaixo)
-    genai.configure(api_key=keys[_key_index % len(keys)])
-
     days  = _next_business_days(5)
     times = settings.get("available_times", ["09:00","10:00","11:00","14:00","15:00","16:00","17:00"])
     company    = settings.get("company_name", "Nossa Empresa")
@@ -170,9 +167,9 @@ RESPONDA SOMENTE JSON válido. Exemplos:
 
     for attempt in range(len(keys)):
         current_key = keys[_key_index % len(keys)]
-        genai.configure(api_key=current_key)
         for model_name in ("gemini-2.0-flash", "gemini-2.5-flash"):
             try:
+                genai.configure(api_key=current_key)
                 model = genai.GenerativeModel(
                     model_name,
                     system_instruction=system,

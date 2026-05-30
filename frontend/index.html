@@ -1167,7 +1167,6 @@
 
         function inicializarApp() {
             checarStatus();
-            carregarTemplates();
             carregarLeads();
             carregarMensagens();
             setInterval(checarStatus, 30000);
@@ -1418,15 +1417,26 @@
             const formData = new FormData();
             formData.append("campaign_name", campaignName);
             if (fileInput.files.length > 0) formData.append("file", fileInput.files[0]);
+            const btn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('button');
             try {
-                const btn = e.target.querySelector('button');
-                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Enviando...`;
+                btn.disabled = true;
+                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Iniciando...`;
                 const res = await fetch(`${API_BASE}/send`, { method: "POST", body: formData });
                 const data = await res.json();
-                alert(`Disparo finalizado! Enviados: ${data.enviados} de ${data.total}`);
-                carregarLeads();
+                if (!res.ok) { alert(`Erro: ${data.detail || 'Falha ao iniciar disparo.'}`); return; }
+                if (!data.iniciado) {
+                    alert(data.message || 'Nenhum lead pendente para disparar.');
+                } else {
+                    alert(`🚀 Disparo iniciado!\n\n${data.total} lead(s) serão contactados em background com delays anti-ban.\n\nRecarregue a lista de leads para acompanhar o progresso.`);
+                    campaignNameInput.value = '';
+                    fileInput.value = '';
+                    carregarLeads();
+                }
+            } catch (_) { alert("Erro ao iniciar o disparo. Verifique a conexão."); }
+            finally {
+                btn.disabled = false;
                 btn.innerHTML = `<i class="fa-solid fa-rocket mr-2"></i> Iniciar Disparo`;
-            } catch (_) { alert("Erro ao realizar os disparos."); }
+            }
         });
 
         // ──────────────────────────────────────────
