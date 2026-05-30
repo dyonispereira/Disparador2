@@ -1374,14 +1374,17 @@ def facebook_extend_token():
     app_secret = s.get("fb_app_secret", "").strip()
     if not all([token, app_id, app_secret]):
         raise HTTPException(status_code=400, detail="Configure Page Access Token, App ID e App Secret antes de estender.")
-    resp = requests.get("https://graph.facebook.com/v25.0/oauth/access_token", params={
+    # Tenta via GET (padrão) e via POST como fallback
+    resp = requests.get("https://graph.facebook.com/oauth/access_token", params={
         "grant_type": "fb_exchange_token",
         "client_id": app_id,
         "client_secret": app_secret,
         "fb_exchange_token": token,
     }, timeout=15).json()
     if "error" in resp:
-        raise HTTPException(status_code=400, detail=resp["error"].get("message", "Erro ao estender token"))
+        err = resp["error"]
+        detail = f"{err.get('message','')} (code={err.get('code','')}, type={err.get('type','')})"
+        raise HTTPException(status_code=400, detail=detail)
     new_token = resp.get("access_token", "")
     expires_in = resp.get("expires_in", 0)
     s["fb_page_access_token"] = new_token
