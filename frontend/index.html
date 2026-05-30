@@ -1819,7 +1819,10 @@
                 const res = await fetch(`${API_BASE}/facebook/import-all-leads`, { method: 'POST' });
                 const data = await res.json();
                 if (res.ok) {
-                    alert(`✅ Importação concluída!\n\nCriados: ${data.criados}\nIgnorados (já existiam): ${data.ignorados}`);
+                    let msg = `✅ Importação concluída!\n\nCriados: ${data.criados}\nIgnorados (já existiam): ${data.ignorados}`;
+                    if (data.erros?.length) msg += `\n\nErros: ${data.erros.join('; ')}`;
+                    if (data.debug?.length) msg += `\n\n📋 Diagnóstico:\n${data.debug.join('\n')}`;
+                    alert(msg);
                 } else {
                     alert('❌ Erro: ' + (data.detail || 'Falha na importação'));
                 }

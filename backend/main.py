@@ -1405,20 +1405,23 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
     criados = 0
     ignorados = 0
     erros = []
+    debug = []
 
     try:
         accounts = requests.get("https://graph.facebook.com/v25.0/me/accounts",
                                 params=_fb_params(page_token, app_secret, {"fields": "id,name,access_token"}),
                                 timeout=15).json()
         if accounts.get("data"):
-            pages = [{"id": p["id"], "access_token": p["access_token"]} for p in accounts["data"]]
+            pages = [{"id": p["id"], "access_token": p["access_token"], "name": p.get("name","")} for p in accounts["data"]]
+            debug.append(f"Páginas encontradas: {[p['name'] for p in pages]}")
         else:
             me_resp = requests.get("https://graph.facebook.com/v25.0/me",
                                    params=_fb_params(page_token, app_secret, {"fields": "id,name"}),
                                    timeout=15).json()
             if "error" in me_resp:
                 raise HTTPException(status_code=400, detail=f"Token inválido: {me_resp['error'].get('message','')}")
-            pages = [{"id": me_resp.get("id", "me"), "access_token": page_token}]
+            pages = [{"id": me_resp.get("id", "me"), "access_token": page_token, "name": me_resp.get("name","")}]
+            debug.append(f"Usando token como page token direto: {me_resp.get('name','')} ({me_resp.get('id','')})")
 
         for page in pages:
             page_id  = page.get("id")
@@ -1426,29 +1429,43 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
 
             forms_resp = requests.get(
                 f"https://graph.facebook.com/v25.0/{page_id}/leadgen_forms",
-                params=_fb_params(page_tok, app_secret, {"fields": "id,name"}),
+                params=_fb_params(page_tok, app_secret, {"fields": "id,name,leads_count"}),
                 timeout=15).json()
             forms = forms_resp.get("data", [])
-            if not forms and "error" in forms_resp:
-                erros.append(f"Página {page_id}: {forms_resp['error'].get('message','')}")
+            if not forms:
+                if "error" in forms_resp:
+                    erros.append(f"Página {page.get('name',page_id)}: {forms_resp['error'].get('message','')}")
+                else:
+                    debug.append(f"Página '{page.get('name',page_id)}': nenhum formulário encontrado")
                 continue
+            debug.append(f"Página '{page.get('name',page_id)}': {len(forms)} formulário(s): {[f.get('name','?') for f in forms]}")
 
             for form in forms:
                 form_id   = form["id"]
                 form_name = form.get("name", form_id)
+                leads_count = form.get("leads_count", "?")
+                debug.append(f"  Formulário '{form_name}': {leads_count} lead(s) no Facebook")
                 next_url  = f"https://graph.facebook.com/v25.0/{form_id}/leads"
                 p = _fb_params(page_tok, app_secret, {"fields": "field_data,created_time", "limit": 100})
 
                 while next_url:
                     resp = requests.get(next_url, params=p, timeout=15).json()
                     p = {}
+                    if "error" in resp:
+                        erros.append(f"Formulário {form_name}: {resp['error'].get('message','')}")
+                        break
                     for lead_data in resp.get("data", []):
                         try:
                             flds = {f["name"]: f["values"][0] for f in lead_data.get("field_data", []) if f.get("values")}
                             phone_raw = flds.get("phone_number") or flds.get("phone") or flds.get("telefone") or flds.get("celular") or ""
                             name      = flds.get("full_name") or flds.get("name") or flds.get("nome") or ""
+                            if not phone_raw:
+                                debug.append(f"    Lead sem telefone. Campos: {list(flds.keys())}")
+                                ignorados += 1
+                                continue
                             phone = _normalizar_telefone(phone_raw)
                             if not phone:
+                                debug.append(f"    Telefone inválido: {phone_raw}")
                                 ignorados += 1
                                 continue
                             if db.query(models.Lead).filter(models.Lead.phone == phone).first():
@@ -1470,7 +1487,7 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar leads do Facebook: {e}")
 
-    return {"ok": True, "criados": criados, "ignorados": ignorados, "erros": erros[:10]}
+    return {"ok": True, "criados": criados, "ignorados": ignorados, "erros": erros[:10], "debug": debug}
 
 
 # =========================
