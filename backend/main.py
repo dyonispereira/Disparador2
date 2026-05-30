@@ -878,10 +878,10 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
 
         reader = csv.reader(StringIO(decoded, newline=''), delimiter=delimiter)
         created = 0
+        ignorados = 0
 
         for row in reader:
             try:
-                # Evita erro de 'IndexError' caso a linha esteja vazia ou incompleta
                 if len(row) < 2:
                     continue
 
