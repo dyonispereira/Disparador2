@@ -1256,6 +1256,84 @@ async def webhook_captura_lead(request: Request, db: Session = Depends(get_db)):
 
 
 # =========================
+# IMPORTAR TODOS OS LEADS DO FACEBOOK
+# =========================
+@app.post("/facebook/import-all-leads")
+def facebook_import_all_leads(db: Session = Depends(get_db)):
+    """Busca todos os leads de todos os formulários da Página e importa para o CRM."""
+    from config import load_settings
+    s = load_settings()
+    page_token = s.get("fb_page_access_token", "").strip()
+    if not page_token:
+        raise HTTPException(status_code=400, detail="Page Access Token não configurado")
+
+    criados = 0
+    ignorados = 0
+    erros = []
+
+    try:
+        # 1. Busca todas as páginas do token
+        me = requests.get("https://graph.facebook.com/v25.0/me/accounts",
+                          params={"access_token": page_token, "fields": "id,name"}, timeout=15).json()
+        pages = me.get("data", [])
+        if not pages:
+            # Tenta usar o token como page token direto
+            pages = [{"id": "me", "access_token": page_token}]
+
+        for page in pages:
+            page_id = page.get("id")
+            page_tok = page.get("access_token", page_token)
+
+            # 2. Busca todos os formulários da página
+            forms_resp = requests.get(f"https://graph.facebook.com/v25.0/{page_id}/leadgen_forms",
+                                      params={"access_token": page_tok, "fields": "id,name"}, timeout=15).json()
+            forms = forms_resp.get("data", [])
+
+            for form in forms:
+                form_id = form["id"]
+                form_name = form.get("name", form_id)
+                next_url = f"https://graph.facebook.com/v25.0/{form_id}/leads"
+                params = {"access_token": page_tok, "fields": "field_data,created_time", "limit": 100}
+
+                while next_url:
+                    resp = requests.get(next_url, params=params, timeout=15).json()
+                    params = {}  # params only for first request
+                    for lead_data in resp.get("data", []):
+                        try:
+                            fields = {f["name"]: f["values"][0] for f in lead_data.get("field_data", []) if f.get("values")}
+                            phone_raw = fields.get("phone_number") or fields.get("phone") or fields.get("telefone") or fields.get("celular") or ""
+                            name = fields.get("full_name") or fields.get("name") or fields.get("nome") or ""
+                            phone = re.sub(r'\D', '', phone_raw)
+                            if len(phone) in [10, 11]:
+                                phone = f"55{phone}"
+                            if not phone:
+                                ignorados += 1
+                                continue
+                            if db.query(models.Lead).filter(models.Lead.phone == phone).first():
+                                ignorados += 1
+                                continue
+                            lead = models.Lead(
+                                name=name or phone,
+                                phone=phone,
+                                status="pendente",
+                                etapa="Novo Lead",
+                                board_id=1,
+                                campaign_name=f"Facebook · {form_name}",
+                                origem_lead="Facebook",
+                            )
+                            db.add(lead)
+                            db.commit()
+                            criados += 1
+                        except Exception as e:
+                            erros.append(str(e))
+                    next_url = resp.get("paging", {}).get("next")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar leads do Facebook: {e}")
+
+    return {"ok": True, "criados": criados, "ignorados": ignorados, "erros": erros[:10]}
+
+
+# =========================
 # WEBHOOK – Facebook Lead Ads
 # =========================
 @app.get("/webhook/facebook")
