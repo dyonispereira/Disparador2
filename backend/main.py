@@ -1586,8 +1586,15 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
                                     pass
                             existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
                             if existing:
+                                import json as _json
+                                changed = False
                                 if fb_created and existing.origem_lead == "Facebook":
                                     existing.created_at = fb_created
+                                    changed = True
+                                if not existing.form_data and flds:
+                                    existing.form_data = _json.dumps(flds, ensure_ascii=False)
+                                    changed = True
+                                if changed:
                                     db.commit()
                                 ignorados += 1
                                 continue
