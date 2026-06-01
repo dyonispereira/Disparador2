@@ -41,20 +41,22 @@ def _run_migrations():
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS custo_campanha FLOAT",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_data TEXT",
             """CREATE TABLE IF NOT EXISTS lead_obs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 lead_id INTEGER NOT NULL REFERENCES leads(id),
                 texto TEXT NOT NULL,
                 autor TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS perfil VARCHAR NOT NULL DEFAULT 'vendedor'",
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS primeiro_login BOOLEAN NOT NULL DEFAULT false",
             "UPDATE usuarios SET perfil = 'admin', primeiro_login = false WHERE email = 'admin@gestorpec.com.br'",
         ]:
             try:
+                conn.execute(text("SAVEPOINT m"))
                 conn.execute(text(sql))
+                conn.execute(text("RELEASE SAVEPOINT m"))
             except Exception:
-                pass
+                conn.execute(text("ROLLBACK TO SAVEPOINT m"))
         conn.commit()
 
 
