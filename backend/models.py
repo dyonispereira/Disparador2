@@ -35,6 +35,7 @@ class Lead(Base):
     board_id = Column(Integer, nullable=True)
     origem_lead = Column(String, nullable=True)
     custo_campanha = Column(Float, nullable=True)
+    form_data = Column(Text, nullable=True)   # JSON: campos extras do formulário
 
     messages = relationship("Message", back_populates="lead")
 

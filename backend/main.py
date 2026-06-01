@@ -39,6 +39,7 @@ def _run_migrations():
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS board_id INTEGER",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS origem_lead VARCHAR",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS custo_campanha FLOAT",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_data TEXT",
             """CREATE TABLE IF NOT EXISTS lead_obs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 lead_id INTEGER NOT NULL REFERENCES leads(id),
@@ -764,6 +765,7 @@ def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
             "origem_lead": lead.origem_lead or "",
             "campaign_name": lead.campaign_name or "",
             "custo_campanha": lead.custo_campanha,
+            "form_data": lead.form_data or "",
         })
     return {"board_id": board_id, "board_nome": board.nome, "etapas": etapas, "board": result}
 
@@ -1438,7 +1440,14 @@ async def webhook_captura_lead(request: Request, db: Session = Depends(get_db)):
     if existing:
         return {"ok": True, "id": existing.id, "status": "already_exists"}
 
-    lead = models.Lead(name=name, phone=phone, status="pendente", etapa="Novo Lead", board_id=1)
+    import json as _json
+    _KNOWN = {"telefone", "nome_completo"}
+    extra = {k: v for k, v in body.items() if k not in _KNOWN and v not in (None, "")}
+    lead = models.Lead(
+        name=name, phone=phone, status="pendente", etapa="Novo Lead", board_id=1,
+        origem_lead="Landing Page",
+        form_data=_json.dumps(extra, ensure_ascii=False) if extra else None,
+    )
     db.add(lead)
     db.commit()
     db.refresh(lead)
@@ -1580,12 +1589,14 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
                                     db.commit()
                                 ignorados += 1
                                 continue
+                            import json as _json
                             db.add(models.Lead(
                                 name=name or phone, phone=phone, status="pendente",
                                 etapa="Novo Lead", board_id=1,
                                 campaign_name=f"Facebook · {form_name}",
                                 origem_lead="Facebook",
                                 created_at=fb_created,
+                                form_data=_json.dumps(flds, ensure_ascii=False),
                             ))
                             db.commit()
                             criados += 1
@@ -1717,12 +1728,14 @@ async def facebook_webhook_lead(request: Request, db: Session = Depends(get_db))
 
             form_id  = value.get("form_id", "") or lead_data.get("form_id", "")
             campaign = f"Facebook · {form_id}" if form_id else "Facebook Leads"
+            import json as _json
             lead = models.Lead(
                 name=name, phone=phone, status="pendente",
                 etapa="Novo Lead", board_id=1,
                 campaign_name=campaign,
                 origem_lead="Facebook",
                 created_at=fb_created,
+                form_data=_json.dumps(fields, ensure_ascii=False),
             )
             db.add(lead)
             db.commit()

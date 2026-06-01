@@ -1030,6 +1030,12 @@
               class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
           </div>
 
+          <!-- ── Dados do Formulário ── -->
+          <div id="modal-form-data-wrap" class="hidden">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">DADOS DO FORMULÁRIO</label>
+            <div id="modal-form-data" class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 space-y-1 border border-slate-200"></div>
+          </div>
+
           <!-- ── Histórico de Interações ── -->
           <div class="border-t border-slate-200 pt-4">
             <div class="flex items-center justify-between mb-3">
@@ -2613,12 +2619,26 @@
             return etapa.replace(/[^a-zA-Z0-9]/g, '_');
         }
 
+        function _formDataSnippet(raw, maxFields = 3) {
+            if (!raw) return '';
+            try {
+                const d = JSON.parse(raw);
+                const _SKIP = new Set(['phone_number','phone','telefone','celular','whatsapp','full_name','first_name','last_name','nome_completo','nome','name']);
+                const entries = Object.entries(d).filter(([k]) => !_SKIP.has(k)).slice(0, maxFields);
+                if (!entries.length) return '';
+                return `<div class="mt-1 space-y-0.5 border-t border-slate-100 pt-1">${
+                    entries.map(([k,v]) => `<div class="text-xs text-slate-500 truncate"><span class="font-medium text-slate-400">${k}:</span> ${v}</div>`).join('')
+                }</div>`;
+            } catch(e) { return ''; }
+        }
+
         function _cardHTML(lead) {
             const badge   = INTERESSE_BADGE[lead.status_interesse] || '';
             const vend    = lead.vendedor ? `<div class="text-xs text-slate-400 truncate"><i class="fa-solid fa-user-tie mr-1"></i>${lead.vendedor}</div>` : '';
             const obsBadge = lead.obs_count > 0
                 ? `<div class="text-xs text-indigo-400 font-medium"><i class="fa-regular fa-comment-dots mr-1"></i>${lead.obs_count}</div>`
                 : '';
+            const formSnippet = _formDataSnippet(lead.form_data);
             return `<div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing hover:shadow-md transition"
                         draggable="true"
                         ondragstart="event.dataTransfer.setData('leadId','${lead.id}');event.dataTransfer.setData('fromEtapa',\`${lead.etapa}\`)"
@@ -2627,7 +2647,8 @@
                 <div class="text-xs text-slate-500 mb-1"><i class="fa-solid fa-phone mr-1"></i>${lead.phone}</div>
                 ${lead.created_at ? `<div class="text-xs text-slate-400 mb-1"><i class="fa-regular fa-calendar mr-1"></i>${lead.created_at}</div>` : ''}
                 ${badge ? `<div class="mb-1">${badge}</div>` : ''}
-                <div class="flex items-center justify-between gap-2">
+                ${formSnippet}
+                <div class="flex items-center justify-between gap-2 mt-1">
                   ${vend}
                   ${obsBadge}
                 </div>
@@ -2659,6 +2680,22 @@
             document.getElementById('modal-origem').value        = lead.origem_lead || '';
             document.getElementById('modal-campanha').value      = lead.campaign_name || '';
             document.getElementById('modal-custo').value         = lead.custo_campanha != null ? lead.custo_campanha : '';
+
+            // Dados do formulário
+            const fdWrap = document.getElementById('modal-form-data-wrap');
+            const fdBox  = document.getElementById('modal-form-data');
+            if (lead.form_data) {
+                try {
+                    const fd = JSON.parse(lead.form_data);
+                    const entries = Object.entries(fd);
+                    if (entries.length) {
+                        fdBox.innerHTML = entries.map(([k,v]) =>
+                            `<div class="flex gap-2"><span class="font-semibold text-slate-500 shrink-0">${k}:</span><span class="text-slate-700">${v}</span></div>`
+                        ).join('');
+                        fdWrap.classList.remove('hidden');
+                    } else { fdWrap.classList.add('hidden'); }
+                } catch { fdWrap.classList.add('hidden'); }
+            } else { fdWrap.classList.add('hidden'); }
 
             // Preenche select de etapa
             const sel = document.getElementById('modal-etapa');
