@@ -285,8 +285,8 @@ def _start_flow(conv, lead, db, settings):
     lines = [
         f"Olá, *{name}*! 😊 Que bom ter seu interesse!",
         "",
-        "Vou agendar uma apresentação rápida da nossa solução.",
-        "Qual data fica melhor pra você?\n",
+        "Vamos fazer um combinado? Em uma apresentação super rápida de apenas 10 minutos eu te mostro o que o GestorPec pode fazer por você!",
+        "Escolha qual a melhor data abaixo:\n",
     ]
     for i, (d, ds) in enumerate(zip(days, date_strs), 1):
         lines.append(f"*{i}.* {_fmt_date(d)} ({d.strftime('%d/%m')})")
