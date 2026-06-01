@@ -126,6 +126,11 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
         db.commit()
         db.refresh(conv)
 
+    # Reunião já confirmada — fluxo encerrado, nenhuma resposta automática
+    if conv.state == "confirmed":
+        print(f"[flow] {lead.phone} fluxo encerrado (confirmed), mensagem ignorada")
+        return True
+
     # Lead voltou a interagir — zera o follow-up para poder reenviar no futuro
     if conv.followup_sent:
         conv.followup_sent = False
@@ -149,7 +154,7 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
         return True
 
     text = raw_text.strip().lower()
-    if conv.state in ("idle", "confirmed", "cancelled"):
+    if conv.state in ("idle", "cancelled"):
         _start_flow(conv, lead, db, settings)
         return True
     if conv.state == "awaiting_date":
@@ -189,7 +194,7 @@ def _handle_with_ai(conv, lead, raw_text: str, db, settings,
     if not result:
         # Gemini unavailable — fall back to full scheduling flow
         text = raw_text.strip().lower()
-        if conv.state in ("idle", "confirmed", "cancelled"):
+        if conv.state in ("idle", "cancelled"):
             _start_flow(conv, lead, db, settings)
         elif conv.state == "awaiting_date":
             # If dates were never offered (state got stuck), restart
@@ -266,8 +271,8 @@ def _handle_with_ai(conv, lead, raw_text: str, db, settings,
         conv.updated_at     = datetime.utcnow()
         db.commit()
 
-    # clarify in idle/confirmed/cancelled: bot answered the question, now present dates
-    elif action == "clarify" and conv.state in ("idle", "confirmed", "cancelled"):
+    # clarify in idle/cancelled: bot answered the question, now present dates
+    elif action == "clarify" and conv.state in ("idle", "cancelled"):
         import time as _time
         _time.sleep(1)
         _start_flow(conv, lead, db, settings)
