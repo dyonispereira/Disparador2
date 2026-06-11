@@ -36,6 +36,8 @@ class Lead(Base):
     origem_lead = Column(String, nullable=True)
     custo_campanha = Column(Float, nullable=True)
     form_data = Column(Text, nullable=True)   # JSON: campos extras do formulário
+    bot_ativo = Column(Boolean, default=True, nullable=False, server_default="true")
+    modo = Column(String, default="auto", nullable=False, server_default="auto")
 
     messages = relationship("Message", back_populates="lead")
 
@@ -127,4 +129,15 @@ class LeadObs(Base):
     lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
     texto = Column(String, nullable=False)
     autor = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class WhatsAppMessage(Base):
+    """Log de mensagens WhatsApp por número de telefone."""
+    __tablename__ = "whatsapp_messages"
+
+    id = Column(Integer, primary_key=True)
+    phone = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    direction = Column(String, nullable=False)   # "in" | "out"
     created_at = Column(DateTime, default=datetime.utcnow)

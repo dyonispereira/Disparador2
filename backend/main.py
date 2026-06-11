@@ -40,6 +40,16 @@ def _run_migrations():
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS origem_lead VARCHAR",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS custo_campanha FLOAT",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_data TEXT",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS bot_ativo BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS modo VARCHAR NOT NULL DEFAULT 'auto'",
+            """CREATE TABLE IF NOT EXISTS whatsapp_messages (
+                id SERIAL PRIMARY KEY,
+                phone VARCHAR NOT NULL,
+                content TEXT NOT NULL,
+                direction VARCHAR NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_wa_messages_phone ON whatsapp_messages(phone)",
             """CREATE TABLE IF NOT EXISTS lead_obs (
                 id SERIAL PRIMARY KEY,
                 lead_id INTEGER NOT NULL REFERENCES leads(id),
@@ -836,6 +846,76 @@ def delete_lead_obs(lead_id: int, obs_id: int, db: Session = Depends(get_db)):
     db.delete(obs)
     db.commit()
     return {"ok": True}
+
+
+# =========================
+# CHAT WHATSAPP
+# =========================
+
+@app.get("/leads/{lead_id}/chat")
+def get_lead_chat(lead_id: int, db: Session = Depends(get_db)):
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+    msgs = (
+        db.query(models.WhatsAppMessage)
+        .filter(models.WhatsAppMessage.phone == lead.phone)
+        .order_by(models.WhatsAppMessage.created_at.asc())
+        .all()
+    )
+    return {
+        "bot_ativo": getattr(lead, "bot_ativo", True),
+        "modo": getattr(lead, "modo", "auto"),
+        "messages": [
+            {
+                "id": m.id,
+                "content": m.content,
+                "direction": m.direction,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in msgs
+        ],
+    }
+
+
+@app.post("/leads/{lead_id}/send")
+def send_lead_message(lead_id: int, body: dict, db: Session = Depends(get_db)):
+    from config import load_settings
+    from services.scheduling_flow import _send
+
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Mensagem vazia")
+
+    settings = load_settings()
+    _send(lead.phone, text, settings)
+
+    msg = models.WhatsAppMessage(phone=lead.phone, content=text, direction="out")
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return {
+        "id": msg.id,
+        "content": msg.content,
+        "direction": msg.direction,
+        "created_at": msg.created_at.isoformat(),
+    }
+
+
+@app.patch("/leads/{lead_id}/bot")
+def toggle_lead_bot(lead_id: int, body: dict, db: Session = Depends(get_db)):
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+    if "bot_ativo" in body:
+        lead.bot_ativo = bool(body["bot_ativo"])
+    if "modo" in body:
+        lead.modo = str(body["modo"])
+    db.commit()
+    return {"bot_ativo": lead.bot_ativo, "modo": lead.modo}
 
 
 # =========================
@@ -1914,6 +1994,12 @@ async def webhook_evolution(request: Request):
                     )
                 except Exception:
                     pass
+
+            # Salva a mensagem recebida no histórico de chat
+            msg_content = text.strip() if text.strip() else ("[áudio]" if audio_data else "")
+            if msg_content:
+                db.add(models.WhatsAppMessage(phone=phone, content=msg_content, direction="in"))
+                db.commit()
 
             handled = handle_incoming(phone=phone, raw_text=text, db=db, settings=settings,
                                        audio_data=audio_data, audio_mime=audio_mime)

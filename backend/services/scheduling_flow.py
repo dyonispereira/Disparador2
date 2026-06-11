@@ -131,6 +131,11 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
         print(f"[flow] {lead.phone} fluxo encerrado (confirmed), mensagem ignorada")
         return True
 
+    # Bot desativado manualmente pelo operador — ignora sem responder
+    if getattr(lead, "bot_ativo", True) is False:
+        print(f"[flow] {lead.phone} bot desativado, mensagem ignorada")
+        return True
+
     # Lead voltou a interagir — zera o follow-up para poder reenviar no futuro
     if conv.followup_sent:
         conv.followup_sent = False
