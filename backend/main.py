@@ -1093,6 +1093,64 @@ def get_instance_status(inst_id: int, db: Session = Depends(get_db)):
         return {"instance_name": inst.instance_name, "state": "offline", "online": False}
 
 
+@app.post("/whatsapp-instances/{inst_id}/connect")
+def connect_whatsapp_instance(inst_id: int, db: Session = Depends(get_db)):
+    from config import load_settings
+    inst = db.query(models.WhatsAppInstance).filter(models.WhatsAppInstance.id == inst_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada")
+
+    settings = load_settings()
+    headers = {"apikey": settings["api_key"]}
+    ev_url = settings["evolution_url"]
+    inst_name = inst.instance_name
+
+    try:
+        state_r = requests.get(f"{ev_url}/instance/connectionState/{inst_name}", headers=headers, timeout=5)
+        if state_r.status_code == 200:
+            state_data = state_r.json()
+            state = (state_data.get("instance") or {}).get("state") or state_data.get("state", "")
+            if state == "open":
+                return {"connected": True, "state": "open"}
+            if state in ("connecting", "close"):
+                if _qr_store.get(inst_name):
+                    return {"base64": _qr_store[inst_name]}
+                requests.get(f"{ev_url}/instance/connect/{inst_name}", headers=headers, timeout=10)
+                return {"ok": True, "waiting": True}
+            # Apaga e recria
+            requests.delete(f"{ev_url}/instance/logout/{inst_name}", headers=headers, timeout=10)
+            time.sleep(1)
+            requests.delete(f"{ev_url}/instance/delete/{inst_name}", headers=headers, timeout=10)
+            for _ in range(6):
+                time.sleep(2)
+                chk = requests.get(f"{ev_url}/instance/connectionState/{inst_name}", headers=headers, timeout=5)
+                if chk.status_code == 404:
+                    break
+
+        _qr_store[inst_name] = None
+        create_r = requests.post(
+            f"{ev_url}/instance/create",
+            json={"instanceName": inst_name, "qrcode": True, "integration": "WHATSAPP-BAILEYS"},
+            headers=headers, timeout=15,
+        )
+        if create_r.status_code not in (200, 201):
+            return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
+
+        _register_webhook_for_instance(inst_name, settings["api_key"], ev_url)
+        requests.get(f"{ev_url}/instance/connect/{inst_name}", headers=headers, timeout=10)
+        return {"ok": True, "waiting": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/whatsapp-instances/{inst_id}/qr")
+def get_instance_qr(inst_id: int, db: Session = Depends(get_db)):
+    inst = db.query(models.WhatsAppInstance).filter(models.WhatsAppInstance.id == inst_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada")
+    return {"base64": _qr_store.get(inst.instance_name)}
+
+
 @app.patch("/leads/{lead_id}/transfer")
 def transfer_lead_instance(lead_id: int, body: dict, db: Session = Depends(get_db)):
     lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
@@ -2061,20 +2119,23 @@ async def webhook_evolution(request: Request):
 
     # Capture QR code — Evolution API v2 sends either QRCODE_UPDATED or connection.update with qr
     if event in ("qrcode.updated", "QRCODE_UPDATED"):
+        inst_name = payload.get("instance", "")
         qr_data = payload.get("data", {})
         b64 = (
             (qr_data.get("qrcode") or {}).get("base64")
             or qr_data.get("base64")
         )
         if b64:
-            _qr_store["base64"] = b64
-            print("[webhook] QR code recebido via QRCODE_UPDATED")
+            _qr_store["base64"] = b64         # legado — instância principal
+            if inst_name:
+                _qr_store[inst_name] = b64    # por instância
+            print(f"[webhook] QR code recebido via QRCODE_UPDATED instance={inst_name}")
         return {"ok": True}
 
     if event in ("connection.update", "CONNECTION_UPDATE"):
+        inst_name = payload.get("instance", "")
         data = payload.get("data", {})
         print(f"[webhook] connection.update: {data}")
-        # Some versions embed QR inside connection.update
         b64 = (
             (data.get("qrcode") or {}).get("base64")
             or data.get("qr")
@@ -2082,7 +2143,9 @@ async def webhook_evolution(request: Request):
         )
         if b64:
             _qr_store["base64"] = b64
-            print("[webhook] QR code recebido via connection.update")
+            if inst_name:
+                _qr_store[inst_name] = b64
+            print(f"[webhook] QR code recebido via connection.update instance={inst_name}")
         return {"ok": True}
 
     if event not in ("messages.upsert", "MESSAGES_UPSERT"):

@@ -1214,6 +1214,24 @@
       </div>
     </div>
 
+    <!-- ════ MODAL: QR CODE INSTÂNCIA ════ -->
+    <div id="inst-qr-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+         onclick="if(event.target===this)fecharInstQR()">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-xs text-center">
+        <div class="px-5 py-4 border-b border-slate-100">
+          <h3 class="font-bold text-slate-800" id="inst-qr-title">Conectar Instância</h3>
+          <p class="text-xs text-slate-500 mt-1">Abra o WhatsApp → Dispositivos conectados → Conectar dispositivo</p>
+        </div>
+        <div class="p-5">
+          <img id="inst-qr-img" src="" alt="QR Code" class="w-52 h-52 mx-auto rounded-lg border border-slate-200">
+          <p id="inst-qr-status" class="text-xs text-slate-500 mt-3">Aguardando escaneamento...</p>
+        </div>
+        <div class="px-5 py-3 border-t border-slate-100">
+          <button onclick="fecharInstQR()" class="text-sm text-slate-500 hover:text-slate-700">Fechar</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ════════════════════════════════════════════════════════
          JAVASCRIPT
     ════════════════════════════════════════════════════════ -->
@@ -3145,13 +3163,19 @@
                     return;
                 }
                 container.innerHTML = list.map(i => `
-                    <div class="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-200">
+                    <div class="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-200">
                         <div class="flex-1 min-w-0">
                             <span class="font-semibold text-sm text-slate-700">${_escHtml(i.nome)}</span>
                             <span class="ml-2 text-xs font-mono text-slate-400">${_escHtml(i.instance_name)}</span>
                         </div>
-                        <span id="inst-status-${i.id}" class="text-xs text-slate-400 flex-shrink-0">—</span>
-                        <button onclick="checarStatusInstancia(${i.id})" class="text-xs text-indigo-500 hover:underline flex-shrink-0">Checar</button>
+                        <span id="inst-status-${i.id}" class="text-xs flex-shrink-0">—</span>
+                        <button onclick="checarStatusInstancia(${i.id})" class="text-xs text-slate-400 hover:text-indigo-500 flex-shrink-0" title="Verificar status">
+                            <i class="fa-solid fa-rotate text-xs"></i>
+                        </button>
+                        <button onclick="conectarInstancia(${i.id},'${_escHtml(i.instance_name)}')"
+                            class="text-xs px-2.5 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition font-semibold flex-shrink-0">
+                            📱 Conectar
+                        </button>
                         <button onclick="removerInstancia(${i.id})" class="text-red-400 hover:text-red-600 flex-shrink-0" title="Remover">
                             <i class="fa-solid fa-trash text-xs"></i>
                         </button>
@@ -3192,6 +3216,79 @@
                 const d = await r.json();
                 el.textContent = d.online ? '🟢 Online' : '🔴 Offline';
             } catch { el.textContent = '🔴 Offline'; }
+        }
+
+        let _instQRPollId = null;
+
+        async function conectarInstancia(id, instanceName) {
+            const statusEl = document.getElementById(`inst-status-${id}`);
+            if (statusEl) statusEl.textContent = '⌛';
+            try {
+                const r = await fetch(`${API_BASE}/whatsapp-instances/${id}/connect`, { method: 'POST' });
+                const d = await r.json();
+                if (d.connected) {
+                    if (statusEl) statusEl.textContent = '🟢 Online';
+                    return;
+                }
+                if (d.base64) {
+                    if (statusEl) statusEl.textContent = '📱 Escaneie o QR';
+                    _mostrarQRInstancia(d.base64, id, instanceName);
+                    return;
+                }
+                if (d.waiting) {
+                    if (statusEl) statusEl.textContent = '⌛ Aguardando QR...';
+                    let attempts = 0;
+                    _instQRPollId = setInterval(async () => {
+                        attempts++;
+                        if (attempts > 30) {
+                            clearInterval(_instQRPollId);
+                            if (statusEl) statusEl.textContent = '❌ Timeout';
+                            return;
+                        }
+                        const qrR = await fetch(`${API_BASE}/whatsapp-instances/${id}/qr`);
+                        const qrD = await qrR.json();
+                        if (qrD.base64) {
+                            clearInterval(_instQRPollId);
+                            if (statusEl) statusEl.textContent = '📱 Escaneie o QR';
+                            _mostrarQRInstancia(qrD.base64, id, instanceName);
+                        }
+                    }, 2000);
+                }
+                if (d.error) {
+                    if (statusEl) statusEl.textContent = '❌ Erro';
+                    alert('Erro: ' + d.error);
+                }
+            } catch(e) {
+                if (statusEl) statusEl.textContent = '❌ Erro';
+                alert('Erro ao conectar: ' + e.message);
+            }
+        }
+
+        function _mostrarQRInstancia(base64, instId, instName) {
+            document.getElementById('inst-qr-title').textContent = `Conectar: ${instName}`;
+            document.getElementById('inst-qr-status').textContent = 'Aguardando escaneamento...';
+            const img = document.getElementById('inst-qr-img');
+            img.src = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
+            document.getElementById('inst-qr-modal').classList.remove('hidden');
+
+            // Polling para confirmar conexão após escanear
+            if (_instQRPollId) clearInterval(_instQRPollId);
+            _instQRPollId = setInterval(async () => {
+                const r = await fetch(`${API_BASE}/whatsapp-instances/${instId}/status`);
+                const d = await r.json();
+                if (d.online) {
+                    clearInterval(_instQRPollId);
+                    document.getElementById('inst-qr-status').textContent = '✅ Conectado com sucesso!';
+                    setTimeout(fecharInstQR, 2000);
+                    const statusEl = document.getElementById(`inst-status-${instId}`);
+                    if (statusEl) statusEl.textContent = '🟢 Online';
+                }
+            }, 3000);
+        }
+
+        function fecharInstQR() {
+            if (_instQRPollId) { clearInterval(_instQRPollId); _instQRPollId = null; }
+            document.getElementById('inst-qr-modal').classList.add('hidden');
         }
 
         // ── Transferência de Atendimento ──
