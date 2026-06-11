@@ -161,6 +161,14 @@
                         <label class="block text-sm font-medium text-slate-700 mb-1">Imagem / Arquivo (Opcional)</label>
                         <input type="file" id="media-file" accept="image/*, .pdf, .mp4" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                     </div>
+                    <!-- Seleção de instâncias para rateio -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1"><i class="fa-solid fa-mobile-screen-button mr-1 text-green-600"></i>Números para Rateio</label>
+                        <div id="disparo-instances-list" class="space-y-1 max-h-32 overflow-y-auto border border-slate-200 rounded p-2 bg-slate-50 text-sm text-slate-500 italic">
+                            Carregando...
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">Selecione os números. Os leads serão distribuídos em round-robin entre eles.</p>
+                    </div>
                     <!-- Configurações Anti-Ban -->
                     <details class="border border-amber-200 rounded-md bg-amber-50">
                         <summary class="cursor-pointer px-3 py-2 text-sm font-semibold text-amber-800 flex items-center gap-2">
@@ -1439,11 +1447,31 @@
             }
         }
 
+        async function carregarInstanciasDisparo() {
+            try {
+                const res = await fetch(`${API_BASE}/whatsapp-instances`);
+                const insts = await res.json();
+                const container = document.getElementById('disparo-instances-list');
+                if (!insts.length) {
+                    container.innerHTML = '<span class="text-slate-400 italic">Nenhuma instância cadastrada.</span>';
+                    return;
+                }
+                container.innerHTML = insts.map(i => `
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" class="disparo-inst-cb" value="${i.id}" ${i.ativo ? 'checked' : ''}>
+                        <span class="${i.ativo ? 'text-slate-700' : 'text-slate-400'}">${i.nome} <span class="text-xs text-slate-400">(${i.instance_name})</span></span>
+                        ${i.ativo ? '<span class="text-xs text-green-600 font-semibold">ativo</span>' : '<span class="text-xs text-red-400">inativo</span>'}
+                    </label>
+                `).join('');
+            } catch (_) {}
+        }
+
         function inicializarApp() {
             checarStatus();
             carregarLeads();
             carregarMensagens();
             carregarBotGlobal();
+            carregarInstanciasDisparo();
             setInterval(checarStatus, 30000);
         }
 
@@ -1810,11 +1838,13 @@
             const batchSize = parseInt(document.getElementById('batch-size').value) || 10;
             const batchPauseMin = (parseInt(document.getElementById('batch-pause-min').value) || 5) * 60;
             const batchPauseMax = (parseInt(document.getElementById('batch-pause-max').value) || 10) * 60;
+            const selectedInsts = [...document.querySelectorAll('.disparo-inst-cb:checked')].map(cb => cb.value);
             const formData = new FormData();
             formData.append("campaign_name", campaignName);
             formData.append("batch_size", batchSize);
             formData.append("batch_pause_min", batchPauseMin);
             formData.append("batch_pause_max", batchPauseMax);
+            if (selectedInsts.length) formData.append("instance_ids", selectedInsts.join(','));
             if (fileInput.files.length > 0) formData.append("file", fileInput.files[0]);
             const btn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('button');
             try {

@@ -1553,14 +1553,20 @@ def get_messages(db: Session = Depends(get_db)):
 
 def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
                  b64_media, mimetype, filename,
-                 batch_size: int = 10, batch_pause_min: int = 300, batch_pause_max: int = 600):
+                 batch_size: int = 10, batch_pause_min: int = 300, batch_pause_max: int = 600,
+                 instance_names: list = None):
     """Runs in a background thread — sends messages with anti-ban delays."""
     from config import load_settings
     settings = load_settings()
     evo_url  = settings.get("evolution_url", EVOLUTION_URL)
     api_key  = settings.get("api_key", API_KEY)
-    instance = settings.get("instance", INSTANCE)
     headers  = {"apikey": api_key, "Content-Type": "application/json"}
+
+    # Instâncias para rateio: usa as fornecidas ou cai na instância padrão
+    if not instance_names:
+        instance_names = [settings.get("instance", INSTANCE)]
+    instance_cycle = instance_names[:]  # cópia para rotação
+    _inst_index = 0
 
     is_image = bool(filename and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')))
     media_type = "image" if is_image else "document"
@@ -1580,6 +1586,10 @@ def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
                 print(f"[disparo] pausa de lote após {sent_in_batch} msgs: {pause:.0f}s (~{pause/60:.1f}min)")
                 time.sleep(pause)
 
+            # Round-robin entre instâncias
+            instance = instance_cycle[_inst_index % len(instance_cycle)]
+            _inst_index += 1
+
             text = re.sub(r'{\s*name\s*}', lead_name or "", random.choice(templates_text), flags=re.IGNORECASE)
             final_code = 500
 
@@ -1587,6 +1597,7 @@ def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
             typing_delay = random.randint(3000, 7000)
             options = {"delay": typing_delay, "presence": "composing"}
 
+            print(f"[disparo] instancia={instance} lead={lead_phone}")
             try:
                 if b64_media:
                     order = random.choice(['media_first', 'text_first'])
@@ -1664,6 +1675,7 @@ async def send(
     batch_size: int = Form(10),
     batch_pause_min: int = Form(300),
     batch_pause_max: int = Form(600),
+    instance_ids: str = Form(None),  # IDs separados por vírgula; vazio = todas ativas
     db: Session = Depends(get_db)
 ):
     templates = db.query(models.MessageTemplate).all()
@@ -1690,24 +1702,38 @@ async def send(
             mimetype = file.content_type
             filename = file.filename
 
+    # Resolve instâncias para rateio
+    if instance_ids:
+        ids_list = [int(x) for x in instance_ids.split(',') if x.strip().isdigit()]
+        insts = db.query(models.WhatsAppInstance).filter(
+            models.WhatsAppInstance.id.in_(ids_list),
+            models.WhatsAppInstance.ativo == True
+        ).all()
+    else:
+        insts = db.query(models.WhatsAppInstance).filter(models.WhatsAppInstance.ativo == True).all()
+
+    instance_names = [i.instance_name for i in insts] if insts else None
+
     leads_snapshot = [(l.id, l.name or "", l.phone) for l in leads]
     templates_text = [t.text for t in templates]
 
     background_tasks.add_task(
         _run_disparo,
         campaign_name, leads_snapshot, templates_text, b64_media, mimetype, filename,
-        batch_size, batch_pause_min, batch_pause_max
+        batch_size, batch_pause_min, batch_pause_max, instance_names
     )
 
-    tempo_estimado_min = len(leads) * 45 + (len(leads) // batch_size) * batch_pause_min
-    tempo_estimado_max = len(leads) * 120 + (len(leads) // batch_size) * batch_pause_max
+    num_insts = len(instance_names) if instance_names else 1
+    tempo_estimado_min = (len(leads) * 45 + (len(leads) // batch_size) * batch_pause_min) // num_insts
+    tempo_estimado_max = (len(leads) * 120 + (len(leads) // batch_size) * batch_pause_max) // num_insts
+    inst_label = f"{num_insts} número(s)" if num_insts > 1 else "1 número"
     return {
         "ok": True,
         "iniciado": True,
         "total": len(leads),
-        "batch_size": batch_size,
+        "instancias": num_insts,
         "message": (
-            f"Disparo iniciado para {len(leads)} lead(s). "
+            f"Disparo iniciado para {len(leads)} lead(s) via {inst_label}. "
             f"Pausa a cada {batch_size} msgs ({batch_pause_min//60}-{batch_pause_max//60} min). "
             f"Tempo estimado: {tempo_estimado_min//60}-{tempo_estimado_max//60} min."
         )
