@@ -42,6 +42,14 @@ def _run_migrations():
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_data TEXT",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS bot_ativo BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS modo VARCHAR NOT NULL DEFAULT 'auto'",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS instancia VARCHAR",
+            """CREATE TABLE IF NOT EXISTS whatsapp_instances (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR NOT NULL,
+                instance_name VARCHAR UNIQUE NOT NULL,
+                ativo BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
             """CREATE TABLE IF NOT EXISTS whatsapp_messages (
                 id SERIAL PRIMARY KEY,
                 phone VARCHAR NOT NULL,
@@ -1029,6 +1037,88 @@ def set_bot_global(body: dict):
     s["bot_global"] = bool(body.get("bot_global", True))
     save_settings(s)
     return {"bot_global": s["bot_global"]}
+
+
+# =========================
+# CONEXÕES WHATSAPP (múltiplas instâncias)
+# =========================
+
+@app.get("/whatsapp-instances")
+def list_whatsapp_instances(db: Session = Depends(get_db)):
+    insts = db.query(models.WhatsAppInstance).order_by(models.WhatsAppInstance.id).all()
+    return [{"id": i.id, "nome": i.nome, "instance_name": i.instance_name, "ativo": i.ativo} for i in insts]
+
+
+@app.post("/whatsapp-instances")
+def create_whatsapp_instance(body: dict, db: Session = Depends(get_db)):
+    nome = (body.get("nome") or "").strip()
+    instance_name = (body.get("instance_name") or "").strip()
+    if not nome or not instance_name:
+        raise HTTPException(status_code=400, detail="Nome e instance_name são obrigatórios")
+    inst = models.WhatsAppInstance(nome=nome, instance_name=instance_name)
+    db.add(inst)
+    db.commit()
+    db.refresh(inst)
+    return {"id": inst.id, "nome": inst.nome, "instance_name": inst.instance_name, "ativo": inst.ativo}
+
+
+@app.delete("/whatsapp-instances/{inst_id}")
+def delete_whatsapp_instance(inst_id: int, db: Session = Depends(get_db)):
+    inst = db.query(models.WhatsAppInstance).filter(models.WhatsAppInstance.id == inst_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada")
+    db.delete(inst)
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/whatsapp-instances/{inst_id}/status")
+def get_instance_status(inst_id: int, db: Session = Depends(get_db)):
+    from config import load_settings
+    inst = db.query(models.WhatsAppInstance).filter(models.WhatsAppInstance.id == inst_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada")
+    settings = load_settings()
+    try:
+        r = requests.get(
+            f"{settings['evolution_url']}/instance/connectionState/{inst.instance_name}",
+            headers={"apikey": settings["api_key"]},
+            timeout=5,
+        )
+        data = r.json() if r.ok else {}
+        state = (data.get("instance") or {}).get("state") or data.get("state") or "unknown"
+        online = state in ("open", "connected", "CONNECTED")
+        return {"instance_name": inst.instance_name, "state": state, "online": online}
+    except Exception:
+        return {"instance_name": inst.instance_name, "state": "offline", "online": False}
+
+
+@app.patch("/leads/{lead_id}/transfer")
+def transfer_lead_instance(lead_id: int, body: dict, db: Session = Depends(get_db)):
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+
+    nova_instancia = (body.get("instancia") or "").strip()
+    autor = (body.get("autor") or "Sistema").strip()
+
+    inst = db.query(models.WhatsAppInstance).filter(
+        models.WhatsAppInstance.instance_name == nova_instancia
+    ).first()
+    nome_instancia = inst.nome if inst else nova_instancia
+
+    antiga = lead.instancia or "principal"
+    lead.instancia = nova_instancia
+    lead.bot_ativo = False
+    lead.modo = "manual"
+
+    db.add(models.LeadObs(
+        lead_id=lead.id,
+        texto=f"Atendimento transferido para {nome_instancia} (antes: {antiga})",
+        autor=autor,
+    ))
+    db.commit()
+    return {"ok": True, "instancia": nova_instancia, "nome": nome_instancia}
 
 
 # =========================

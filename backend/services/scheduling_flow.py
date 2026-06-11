@@ -141,6 +141,11 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
         print(f"[flow] {lead.phone} bot desativado, mensagem ignorada")
         return True
 
+    # Usar instância Evolution atribuída ao lead (se houver)
+    if getattr(lead, "instancia", None):
+        settings = dict(settings)
+        settings["instance"] = lead.instancia
+
     # Lead voltou a interagir — zera o follow-up para poder reenviar no futuro
     if conv.followup_sent:
         conv.followup_sent = False

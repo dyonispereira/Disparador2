@@ -38,6 +38,7 @@ class Lead(Base):
     form_data = Column(Text, nullable=True)   # JSON: campos extras do formulário
     bot_ativo = Column(Boolean, default=True, nullable=False, server_default="true")
     modo = Column(String, default="auto", nullable=False, server_default="auto")
+    instancia = Column(String, nullable=True)   # instância Evolution atribuída a este lead
 
     messages = relationship("Message", back_populates="lead")
 
@@ -129,6 +130,17 @@ class LeadObs(Base):
     lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False)
     texto = Column(String, nullable=False)
     autor = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class WhatsAppInstance(Base):
+    """Números comerciais do WhatsApp (instâncias Evolution API)."""
+    __tablename__ = "whatsapp_instances"
+
+    id = Column(Integer, primary_key=True)
+    nome = Column(String, nullable=False)                       # "Comercial 1", "SDR", etc.
+    instance_name = Column(String, unique=True, nullable=False) # nome da instância no Evolution
+    ativo = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
