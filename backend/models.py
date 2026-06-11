@@ -139,5 +139,7 @@ class WhatsAppMessage(Base):
     id = Column(Integer, primary_key=True)
     phone = Column(String, nullable=False)
     content = Column(Text, nullable=False)
-    direction = Column(String, nullable=False)   # "in" | "out"
+    direction = Column(String, nullable=False)             # "in" | "out"
+    tipo = Column(String, default="text", nullable=False, server_default="text")  # text|audio|imagem|arquivo
+    url_arquivo = Column(Text, nullable=True)              # data URI para media
     created_at = Column(DateTime, default=datetime.utcnow)

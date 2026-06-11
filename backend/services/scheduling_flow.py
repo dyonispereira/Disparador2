@@ -99,6 +99,11 @@ def handle_incoming(phone: str, raw_text: str, db: Session, settings: dict,
     Called for every incoming WhatsApp message.
     Returns True if the message was consumed by the scheduling flow.
     """
+    # Bot globalmente pausado — nenhuma resposta automática
+    if not settings.get("bot_global", True):
+        print(f"[flow] bot global pausado, mensagem de {phone} ignorada")
+        return True
+
     from models import ConversationState, Lead
 
     variants = _phone_variants(phone)

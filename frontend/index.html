@@ -94,6 +94,12 @@
         </div>
     </nav>
 
+    <!-- Banner: Bot Pausado -->
+    <div id="bot-paused-banner" class="hidden bg-red-600 text-white text-center text-sm font-semibold py-2 px-4">
+        🔴 BOT GLOBALMENTE PAUSADO — Nenhuma resposta automática está sendo enviada.
+        <button onclick="toggleBotGlobal()" class="ml-4 underline text-xs font-normal">Reativar agora</button>
+    </div>
+
     <!-- ════════════════════════════════════════════════════════
          TAB: LEADS & DISPARO
     ════════════════════════════════════════════════════════ -->
@@ -721,6 +727,27 @@
             </div>
         </div>
 
+        <!-- Automação -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+            <h2 class="text-lg font-bold mb-4 border-b pb-2">
+                <i class="fa-solid fa-robot text-emerald-500 mr-2"></i>Automação
+            </h2>
+            <div class="flex items-center justify-between p-4 rounded-xl border-2 transition" id="bot-global-card">
+                <div>
+                    <p class="font-semibold text-slate-700" id="bot-global-label">BOT ATIVO</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Todos os fluxos automáticos estão funcionando normalmente.</p>
+                </div>
+                <button id="btn-bot-global" onclick="toggleBotGlobal()"
+                    class="relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none">
+                    <span id="bot-global-knob" class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform"></span>
+                </button>
+            </div>
+            <p class="text-xs text-slate-400 mt-2">
+                <i class="fa-solid fa-circle-info mr-1"></i>
+                Quando pausado, nenhum bot responde — atendimento fica 100% manual. Reative manualmente quando quiser.
+            </p>
+        </div>
+
         <!-- Salvar -->
         <div class="flex justify-end">
             <button onclick="salvarConfiguracoes()" class="bg-indigo-600 text-white px-8 py-3 rounded-lg shadow hover:bg-indigo-700 transition font-semibold text-sm">
@@ -1094,7 +1121,18 @@
             <div class="text-center text-slate-400 text-sm py-8">Carregando...</div>
           </div>
           <!-- input de envio -->
-          <div class="px-3 py-2.5 border-t border-slate-100 flex gap-2 bg-white flex-shrink-0">
+          <div class="px-3 py-2.5 border-t border-slate-100 flex gap-2 bg-white flex-shrink-0 items-center">
+            <!-- Áudio -->
+            <button id="btn-gravar" onclick="toggleGravacao()" title="Gravar áudio"
+              class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition text-base">
+              🎤
+            </button>
+            <!-- Anexo -->
+            <button onclick="abrirAnexo()" title="Enviar imagem ou arquivo"
+              class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition text-base">
+              📎
+            </button>
+            <input id="chat-file-input" type="file" accept="image/*,*/*" class="hidden" onchange="onFileSelect(this)">
             <input id="chat-input" type="text" placeholder="Digite uma mensagem..."
               onkeydown="if(event.key==='Enter')enviarMensagem()"
               class="flex-1 border border-slate-300 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400">
@@ -1272,6 +1310,7 @@
             checarStatus();
             carregarLeads();
             carregarMensagens();
+            carregarBotGlobal();
             setInterval(checarStatus, 30000);
         }
 
@@ -1291,7 +1330,7 @@
 
             if (name === 'meetings') { carregarReunioes(); carregarConversas(); }
             if (name === 'team') { carregarParticipantes(); carregarUsuariosCRM(); }
-            if (name === 'settings') { carregarConfiguracoes(); verificarGoogle(); }
+            if (name === 'settings') { carregarConfiguracoes(); verificarGoogle(); carregarBotGlobal(); }
             if (name === 'funil') { carregarBoards().then(() => carregarKanban()); }
             if (name === 'dashboard') { _dashPopularBoards().then(() => carregarDashboard()); }
         }
@@ -2828,12 +2867,29 @@
             const isOut = m.direction === 'out';
             const time = new Date(m.created_at + (m.created_at.endsWith('Z') ? '' : 'Z'))
                 .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const tipo = m.tipo || 'text';
+            let inner = '';
+            if (tipo === 'audio') {
+                inner = m.url_arquivo
+                    ? `<audio controls class="max-w-full h-8"><source src="${m.url_arquivo}"></audio>`
+                    : `<span class="italic text-xs opacity-80">[áudio]</span>`;
+            } else if (tipo === 'imagem') {
+                inner = m.url_arquivo
+                    ? `<img src="${m.url_arquivo}" class="max-w-full rounded-lg max-h-48 object-contain" loading="lazy">`
+                    : `<span class="italic text-xs opacity-80">[imagem]</span>`;
+            } else if (tipo === 'arquivo') {
+                inner = m.url_arquivo
+                    ? `<a href="${m.url_arquivo}" download="${_escHtml(m.content)}" class="flex items-center gap-1 underline text-sm"><i class="fa-solid fa-file text-xs"></i>${_escHtml(m.content)}</a>`
+                    : `<span class="italic text-xs opacity-80">[arquivo]</span>`;
+            } else {
+                inner = `<div class="whitespace-pre-wrap break-words">${_escHtml(m.content)}</div>`;
+            }
             return `<div class="flex ${isOut ? 'justify-end' : 'justify-start'}">
               <div class="max-w-[78%] px-3 py-2 rounded-2xl text-sm shadow-sm
                 ${isOut
                   ? 'bg-green-500 text-white rounded-br-none'
                   : 'bg-white text-slate-700 border border-slate-100 rounded-bl-none'}">
-                <div class="whitespace-pre-wrap break-words">${_escHtml(m.content)}</div>
+                ${inner}
                 <div class="text-[10px] mt-1 ${isOut ? 'text-green-100' : 'text-slate-400'} text-right">${time}</div>
               </div>
             </div>`;
@@ -2876,19 +2932,12 @@
             try {
                 const resp = await fetch(`${API_BASE}/leads/${_chatLeadId}/send`, {
                     method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + localStorage.getItem('auth_token'),
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text }),
                 });
                 if (!resp.ok) throw new Error('send failed');
                 const msg = await resp.json();
-                const container = document.getElementById('chat-messages');
-                const emptyEl = container.querySelector('.text-center');
-                if (emptyEl) container.innerHTML = '';
-                container.insertAdjacentHTML('beforeend', _chatMsgHtml(msg));
-                container.scrollTop = container.scrollHeight;
+                _appendChatMsg(msg);
             } catch(e) {
                 input.value = text;
                 alert('Erro ao enviar mensagem.');
@@ -2896,6 +2945,140 @@
                 input.disabled = false;
                 input.focus();
             }
+        }
+
+        function _appendChatMsg(msg) {
+            const container = document.getElementById('chat-messages');
+            const emptyEl = container.querySelector('.text-center');
+            if (emptyEl) container.innerHTML = '';
+            container.insertAdjacentHTML('beforeend', _chatMsgHtml(msg));
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // ── Áudio (MediaRecorder) ──
+        let _mediaRecorder = null;
+        let _audioChunks = [];
+        let _audioStream = null;
+
+        function _blobToBase64(blob) {
+            return new Promise(resolve => {
+                const r = new FileReader();
+                r.onloadend = () => resolve(r.result.split(',')[1]);
+                r.readAsDataURL(blob);
+            });
+        }
+
+        async function toggleGravacao() {
+            const btn = document.getElementById('btn-gravar');
+            if (_mediaRecorder && _mediaRecorder.state === 'recording') {
+                _mediaRecorder.stop();
+                return;
+            }
+            try {
+                _audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                _audioChunks = [];
+                _mediaRecorder = new MediaRecorder(_audioStream);
+                _mediaRecorder.ondataavailable = e => { if (e.data.size > 0) _audioChunks.push(e.data); };
+                _mediaRecorder.onstop = async () => {
+                    btn.innerHTML = '🎤';
+                    btn.classList.remove('bg-red-100', 'animate-pulse');
+                    _audioStream.getTracks().forEach(t => t.stop());
+                    _audioStream = null;
+                    const blob = new Blob(_audioChunks, { type: 'audio/ogg; codecs=opus' });
+                    const b64 = await _blobToBase64(blob);
+                    await enviarAudio(b64, blob.type.split(';')[0]);
+                };
+                _mediaRecorder.start();
+                btn.innerHTML = '⏹️';
+                btn.classList.add('bg-red-100', 'animate-pulse');
+            } catch(e) {
+                alert('Microfone indisponível: ' + e.message);
+            }
+        }
+
+        async function enviarAudio(b64, mime) {
+            if (!_chatLeadId) return;
+            try {
+                const resp = await fetch(`${API_BASE}/leads/${_chatLeadId}/send-audio`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio: b64, mime }),
+                });
+                if (!resp.ok) throw new Error();
+                _appendChatMsg(await resp.json());
+            } catch { alert('Erro ao enviar áudio.'); }
+        }
+
+        // ── Arquivo/Imagem ──
+        function abrirAnexo() {
+            document.getElementById('chat-file-input').click();
+        }
+
+        async function onFileSelect(input) {
+            const file = input.files[0];
+            if (!file) return;
+            input.value = '';
+            const b64 = await _blobToBase64(file);
+            try {
+                const resp = await fetch(`${API_BASE}/leads/${_chatLeadId}/send-media`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ media: b64, mime: file.type, filename: file.name }),
+                });
+                if (!resp.ok) throw new Error();
+                _appendChatMsg(await resp.json());
+            } catch { alert('Erro ao enviar arquivo.'); }
+        }
+
+        // ── Bot Global ──
+        let _botGlobal = true;
+
+        async function carregarBotGlobal() {
+            try {
+                const r = await fetch(`${API_BASE}/bot-global`);
+                const d = await r.json();
+                _botGlobal = d.bot_global;
+                _renderBotGlobalUI();
+            } catch {}
+        }
+
+        function _renderBotGlobalUI() {
+            const card  = document.getElementById('bot-global-card');
+            const label = document.getElementById('bot-global-label');
+            const btn   = document.getElementById('btn-bot-global');
+            const knob  = document.getElementById('bot-global-knob');
+            const banner = document.getElementById('bot-paused-banner');
+            if (!card) return;
+            if (_botGlobal) {
+                card.className = 'flex items-center justify-between p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50 transition';
+                label.textContent = '🟢 BOT ATIVO';
+                label.className = 'font-semibold text-emerald-700';
+                btn.className = 'relative inline-flex h-7 w-14 items-center rounded-full bg-emerald-500 transition-colors focus:outline-none';
+                knob.className = 'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform translate-x-7';
+            } else {
+                card.className = 'flex items-center justify-between p-4 rounded-xl border-2 border-red-200 bg-red-50 transition';
+                label.textContent = '🔴 BOT PAUSADO';
+                label.className = 'font-semibold text-red-700';
+                btn.className = 'relative inline-flex h-7 w-14 items-center rounded-full bg-red-400 transition-colors focus:outline-none';
+                knob.className = 'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform translate-x-1';
+            }
+            if (banner) {
+                banner.classList.toggle('hidden', _botGlobal);
+            }
+        }
+
+        async function toggleBotGlobal() {
+            const novo = !_botGlobal;
+            try {
+                const r = await fetch(`${API_BASE}/bot-global`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bot_global: novo }),
+                });
+                const d = await r.json();
+                _botGlobal = d.bot_global;
+                _renderBotGlobalUI();
+            } catch { alert('Erro ao alterar bot global.'); }
         }
 
         async function excluirLead() {

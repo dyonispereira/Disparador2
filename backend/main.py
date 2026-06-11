@@ -50,6 +50,8 @@ def _run_migrations():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
             "CREATE INDEX IF NOT EXISTS idx_wa_messages_phone ON whatsapp_messages(phone)",
+            "ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS tipo VARCHAR NOT NULL DEFAULT 'text'",
+            "ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS url_arquivo TEXT",
             """CREATE TABLE IF NOT EXISTS lead_obs (
                 id SERIAL PRIMARY KEY,
                 lead_id INTEGER NOT NULL REFERENCES leads(id),
@@ -872,6 +874,8 @@ def get_lead_chat(lead_id: int, db: Session = Depends(get_db)):
                 "content": m.content,
                 "direction": m.direction,
                 "created_at": m.created_at.isoformat(),
+                "tipo": getattr(m, "tipo", "text") or "text",
+                "url_arquivo": getattr(m, "url_arquivo", None),
             }
             for m in msgs
         ],
@@ -893,7 +897,7 @@ def send_lead_message(lead_id: int, body: dict, db: Session = Depends(get_db)):
     settings = load_settings()
     _send(lead.phone, text, settings)
 
-    msg = models.WhatsAppMessage(phone=lead.phone, content=text, direction="out")
+    msg = models.WhatsAppMessage(phone=lead.phone, content=text, direction="out", tipo="text")
     db.add(msg)
     db.commit()
     db.refresh(msg)
@@ -902,6 +906,8 @@ def send_lead_message(lead_id: int, body: dict, db: Session = Depends(get_db)):
         "content": msg.content,
         "direction": msg.direction,
         "created_at": msg.created_at.isoformat(),
+        "tipo": "text",
+        "url_arquivo": None,
     }
 
 
@@ -916,6 +922,113 @@ def toggle_lead_bot(lead_id: int, body: dict, db: Session = Depends(get_db)):
         lead.modo = str(body["modo"])
     db.commit()
     return {"bot_ativo": lead.bot_ativo, "modo": lead.modo}
+
+
+@app.post("/leads/{lead_id}/send-audio")
+def send_lead_audio(lead_id: int, body: dict, db: Session = Depends(get_db)):
+    from config import load_settings
+
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+
+    audio_b64 = body.get("audio", "")
+    mime = body.get("mime", "audio/ogg")
+    if not audio_b64:
+        raise HTTPException(status_code=400, detail="Áudio vazio")
+
+    settings = load_settings()
+    try:
+        requests.post(
+            f"{settings['evolution_url']}/message/sendAudio/{settings['instance']}",
+            json={"number": lead.phone, "audio": audio_b64, "encoding": True},
+            headers={"apikey": settings["api_key"], "Content-Type": "application/json"},
+            timeout=30,
+        )
+    except Exception as e:
+        print(f"[send-audio] error: {e}")
+
+    data_uri = f"data:{mime};base64,{audio_b64}"
+    msg = models.WhatsAppMessage(
+        phone=lead.phone, content="[áudio]", direction="out",
+        tipo="audio", url_arquivo=data_uri,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return {
+        "id": msg.id, "content": msg.content, "direction": msg.direction,
+        "created_at": msg.created_at.isoformat(), "tipo": msg.tipo, "url_arquivo": msg.url_arquivo,
+    }
+
+
+@app.post("/leads/{lead_id}/send-media")
+def send_lead_media(lead_id: int, body: dict, db: Session = Depends(get_db)):
+    from config import load_settings
+
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+
+    media_b64 = body.get("media", "")
+    mime = body.get("mime", "image/jpeg")
+    filename = body.get("filename", "arquivo")
+    if not media_b64:
+        raise HTTPException(status_code=400, detail="Arquivo vazio")
+
+    tipo = "imagem" if mime.startswith("image/") else "arquivo"
+    ev_mediatype = "image" if mime.startswith("image/") else ("video" if mime.startswith("video/") else "document")
+
+    settings = load_settings()
+    try:
+        requests.post(
+            f"{settings['evolution_url']}/message/sendMedia/{settings['instance']}",
+            json={
+                "number": lead.phone,
+                "mediatype": ev_mediatype,
+                "mimetype": mime,
+                "media": media_b64,
+                "caption": "",
+                "fileName": filename,
+            },
+            headers={"apikey": settings["api_key"], "Content-Type": "application/json"},
+            timeout=30,
+        )
+    except Exception as e:
+        print(f"[send-media] error: {e}")
+
+    data_uri = f"data:{mime};base64,{media_b64}"
+    msg = models.WhatsAppMessage(
+        phone=lead.phone, content=filename, direction="out",
+        tipo=tipo, url_arquivo=data_uri,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return {
+        "id": msg.id, "content": msg.content, "direction": msg.direction,
+        "created_at": msg.created_at.isoformat(), "tipo": msg.tipo, "url_arquivo": msg.url_arquivo,
+    }
+
+
+# =========================
+# BOT GLOBAL
+# =========================
+
+@app.get("/bot-global")
+def get_bot_global():
+    from config import load_settings
+    s = load_settings()
+    return {"bot_global": s.get("bot_global", True)}
+
+
+@app.patch("/bot-global")
+def set_bot_global(body: dict):
+    from config import load_settings, save_settings
+    s = load_settings()
+    s["bot_global"] = bool(body.get("bot_global", True))
+    save_settings(s)
+    return {"bot_global": s["bot_global"]}
 
 
 # =========================
