@@ -3220,10 +3220,17 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ bot_global: novo }),
                 });
+                if (!r.ok) {
+                    const errBody = await r.text();
+                    throw new Error(`HTTP ${r.status}: ${errBody}`);
+                }
                 const d = await r.json();
                 _botGlobal = d.bot_global;
                 _renderBotGlobalUI();
-            } catch { alert('Erro ao alterar bot global.'); }
+            } catch (err) {
+                console.error('[bot-global]', err);
+                alert('Erro ao alterar bot global:\n' + err.message);
+            }
         }
 
         // ── Conexões WhatsApp (múltiplas instâncias) ──
