@@ -1552,7 +1552,8 @@ def get_messages(db: Session = Depends(get_db)):
 # =========================
 
 def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
-                 b64_media, mimetype, filename):
+                 b64_media, mimetype, filename,
+                 batch_size: int = 10, batch_pause_min: int = 300, batch_pause_max: int = 600):
     """Runs in a background thread — sends messages with anti-ban delays."""
     from config import load_settings
     settings = load_settings()
@@ -1564,6 +1565,8 @@ def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
     is_image = bool(filename and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')))
     media_type = "image" if is_image else "document"
 
+    sent_in_batch = 0
+
     db = SessionLocal()
     try:
         for i, (lead_id, lead_name, lead_phone) in enumerate(leads_snapshot):
@@ -1571,8 +1574,18 @@ def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
             if not lead or lead.status == "enviado":
                 continue
 
+            # Pausa longa a cada batch_size mensagens enviadas
+            if sent_in_batch > 0 and sent_in_batch % batch_size == 0:
+                pause = random.uniform(batch_pause_min, batch_pause_max)
+                print(f"[disparo] pausa de lote após {sent_in_batch} msgs: {pause:.0f}s (~{pause/60:.1f}min)")
+                time.sleep(pause)
+
             text = re.sub(r'{\s*name\s*}', lead_name or "", random.choice(templates_text), flags=re.IGNORECASE)
             final_code = 500
+
+            # Simula digitação antes de enviar (3-7 segundos)
+            typing_delay = random.randint(3000, 7000)
+            options = {"delay": typing_delay, "presence": "composing"}
 
             try:
                 if b64_media:
@@ -1580,24 +1593,26 @@ def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
                     if order == 'media_first':
                         r = requests.post(
                             f"{evo_url}/message/sendMedia/{instance}",
-                            json={"number": lead_phone, "mediatype": media_type, "mimetype": mimetype, "caption": text, "media": b64_media},
+                            json={"number": lead_phone, "mediatype": media_type, "mimetype": mimetype,
+                                  "caption": text, "media": b64_media, "options": options},
                             headers=headers, timeout=30)
                         final_code = r.status_code
                         print(f"[disparo] media_first {lead_phone}: {r.status_code}")
                     else:
                         r1 = requests.post(f"{evo_url}/message/sendText/{instance}",
-                                           json={"number": lead_phone, "text": text},
+                                           json={"number": lead_phone, "text": text, "options": options},
                                            headers=headers, timeout=15)
-                        time.sleep(random.uniform(2, 8))
+                        time.sleep(random.uniform(4, 10))
                         r2 = requests.post(
                             f"{evo_url}/message/sendMedia/{instance}",
-                            json={"number": lead_phone, "mediatype": media_type, "mimetype": mimetype, "media": b64_media},
+                            json={"number": lead_phone, "mediatype": media_type, "mimetype": mimetype,
+                                  "media": b64_media, "options": {"delay": 2000, "presence": "composing"}},
                             headers=headers, timeout=30)
                         final_code = r2.status_code if r1.ok else r1.status_code
                         print(f"[disparo] text_first {lead_phone}: txt={r1.status_code} media={r2.status_code}")
                 else:
                     r = requests.post(f"{evo_url}/message/sendText/{instance}",
-                                      json={"number": lead_phone, "text": text},
+                                      json={"number": lead_phone, "text": text, "options": options},
                                       headers=headers, timeout=15)
                     final_code = r.status_code
                     print(f"[disparo] text_only {lead_phone}: {r.status_code}")
@@ -1611,8 +1626,11 @@ def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
             lead.sent_at = datetime.utcnow()
             db.commit()
 
+            if lead.status == "enviado":
+                sent_in_batch += 1
+
             if i < len(leads_snapshot) - 1:
-                delay = random.uniform(20, 90)
+                delay = random.uniform(45, 120)
                 print(f"[disparo] aguardando {delay:.0f}s...")
                 time.sleep(delay)
 
@@ -1643,6 +1661,9 @@ async def send(
     campaign_name: str = Form(...),
     file: UploadFile = File(None),
     lead_ids: str = Form(None),
+    batch_size: int = Form(10),
+    batch_pause_min: int = Form(300),
+    batch_pause_max: int = Form(600),
     db: Session = Depends(get_db)
 ):
     templates = db.query(models.MessageTemplate).all()
@@ -1674,14 +1695,22 @@ async def send(
 
     background_tasks.add_task(
         _run_disparo,
-        campaign_name, leads_snapshot, templates_text, b64_media, mimetype, filename
+        campaign_name, leads_snapshot, templates_text, b64_media, mimetype, filename,
+        batch_size, batch_pause_min, batch_pause_max
     )
 
+    tempo_estimado_min = len(leads) * 45 + (len(leads) // batch_size) * batch_pause_min
+    tempo_estimado_max = len(leads) * 120 + (len(leads) // batch_size) * batch_pause_max
     return {
         "ok": True,
         "iniciado": True,
         "total": len(leads),
-        "message": f"Disparo iniciado para {len(leads)} lead(s). Os envios ocorrem em background com delays anti-ban."
+        "batch_size": batch_size,
+        "message": (
+            f"Disparo iniciado para {len(leads)} lead(s). "
+            f"Pausa a cada {batch_size} msgs ({batch_pause_min//60}-{batch_pause_max//60} min). "
+            f"Tempo estimado: {tempo_estimado_min//60}-{tempo_estimado_max//60} min."
+        )
     }
 
 # =========================

@@ -161,6 +161,30 @@
                         <label class="block text-sm font-medium text-slate-700 mb-1">Imagem / Arquivo (Opcional)</label>
                         <input type="file" id="media-file" accept="image/*, .pdf, .mp4" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                     </div>
+                    <!-- Configurações Anti-Ban -->
+                    <details class="border border-amber-200 rounded-md bg-amber-50">
+                        <summary class="cursor-pointer px-3 py-2 text-sm font-semibold text-amber-800 flex items-center gap-2">
+                            <i class="fa-solid fa-shield-halved"></i> Configurações Anti-Ban
+                        </summary>
+                        <div class="px-3 pb-3 pt-1 space-y-3">
+                            <p class="text-xs text-amber-700">Pausas automáticas evitam bloqueio pelo WhatsApp.</p>
+                            <div class="flex gap-3">
+                                <div class="flex-1">
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Msgs por lote</label>
+                                    <input type="number" id="batch-size" value="10" min="5" max="30" class="w-full border border-slate-300 rounded p-1.5 text-sm">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Pausa mín. (min)</label>
+                                    <input type="number" id="batch-pause-min" value="5" min="3" max="30" class="w-full border border-slate-300 rounded p-1.5 text-sm">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Pausa máx. (min)</label>
+                                    <input type="number" id="batch-pause-max" value="10" min="5" max="60" class="w-full border border-slate-300 rounded p-1.5 text-sm">
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500">Intervalo entre mensagens: 45–120s. Digitação simulada automaticamente.</p>
+                        </div>
+                    </details>
                     <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-700 transition font-bold text-lg flex justify-center items-center">
                         <i class="fa-solid fa-rocket mr-2"></i> Iniciar Disparo
                     </button>
@@ -1783,8 +1807,14 @@
             const campaignName = campaignNameInput.value.trim();
             if (!campaignName) { alert("O nome da campanha é obrigatório!"); campaignNameInput.focus(); return; }
             const fileInput = document.getElementById('media-file');
+            const batchSize = parseInt(document.getElementById('batch-size').value) || 10;
+            const batchPauseMin = (parseInt(document.getElementById('batch-pause-min').value) || 5) * 60;
+            const batchPauseMax = (parseInt(document.getElementById('batch-pause-max').value) || 10) * 60;
             const formData = new FormData();
             formData.append("campaign_name", campaignName);
+            formData.append("batch_size", batchSize);
+            formData.append("batch_pause_min", batchPauseMin);
+            formData.append("batch_pause_max", batchPauseMax);
             if (fileInput.files.length > 0) formData.append("file", fileInput.files[0]);
             const btn = e.target.querySelector('button[type="submit"]') || e.target.querySelector('button');
             try {
@@ -1796,13 +1826,10 @@
                 if (!data.iniciado) {
                     alert(data.message || 'Nenhum lead pendente para disparar.');
                 } else {
-                    alert(`🚀 Disparo iniciado!\n\n${data.total} lead(s) serão contactados em background.\n\nA planilha atualizada será baixada automaticamente quando o disparo finalizar.\nRecarregue a lista de leads para acompanhar o progresso.`);
+                    alert(`🚀 Disparo iniciado!\n\n${data.message}`);
                     campaignNameInput.value = '';
                     fileInput.value = '';
                     carregarLeads();
-                    // Agenda download da planilha após tempo estimado do disparo
-                    const tempoEstimado = Math.min(data.total * 55000, 300000); // ~55s por lead, máx 5min
-                    setTimeout(() => exportarPlanilha(), tempoEstimado);
                 }
             } catch (_) { alert("Erro ao iniciar o disparo. Verifique a conexão."); }
             finally {
