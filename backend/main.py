@@ -2377,6 +2377,35 @@ async def webhook_evolution(request: Request):
 
         print(f"[webhook] phone={phone} text={repr(text)} audio={bool(audio_data)}")
 
+        # Garante que todo contato novo entra no Funil CRM, mesmo sem texto
+        db = SessionLocal()
+        try:
+            def _variants(p):
+                vs = [p]
+                if p.startswith("55") and len(p) == 12:
+                    vs.append(p[:4] + "9" + p[4:])
+                elif p.startswith("55") and len(p) == 13 and p[4] == "9":
+                    vs.append(p[:4] + p[5:])
+                return vs
+            lead = db.query(models.Lead).filter(models.Lead.phone.in_(_variants(phone))).first()
+            if not lead:
+                lead = models.Lead(
+                    name=phone, phone=phone, status="pendente",
+                    etapa="Novo Lead", board_id=1, origem_lead="WhatsApp",
+                )
+                db.add(lead)
+                db.commit()
+                db.refresh(lead)
+                print(f"[webhook] novo lead criado via WhatsApp: {phone}")
+            elif not lead.board_id:
+                lead.board_id = 1
+                lead.etapa = "Novo Lead"
+                db.commit()
+            db.close()
+        except Exception as _e:
+            print(f"[webhook] erro ao criar lead {phone}: {_e}")
+            db.close()
+
         if not text.strip() and not audio_data:
             continue
 
