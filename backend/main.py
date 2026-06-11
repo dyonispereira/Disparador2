@@ -1168,6 +1168,98 @@ def get_instance_qr(inst_id: int, db: Session = Depends(get_db)):
     return {"base64": _qr_store.get(inst.instance_name)}
 
 
+@app.post("/leads/{lead_id}/schedule-meet")
+def schedule_meet_manual(lead_id: int, body: dict, db: Session = Depends(get_db)):
+    """Cria reunião no Google Calendar + Meet a partir do chat do CRM."""
+    from services.google_meet import create_meet_event, is_authenticated
+    from services.scheduling_flow import _send
+    from config import load_settings
+    import json as _json
+
+    if not is_authenticated():
+        raise HTTPException(status_code=400, detail="Google Calendar não autenticado. Configure em Configurações → Google.")
+
+    data_str = (body.get("data") or "").strip()   # YYYY-MM-DD
+    hora_str = (body.get("hora") or "").strip()   # HH:MM
+    if not data_str or not hora_str:
+        raise HTTPException(status_code=400, detail="Data e hora são obrigatórios")
+
+    lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+
+    settings = load_settings()
+    company   = settings.get("company_name", "Empresa")
+    cal_id    = settings.get("company_calendar_email", "") or "primary"
+
+    # Convidados: padrão das configs + participantes ativos
+    emails = list(settings.get("default_meet_emails", []) or [])
+    for p in db.query(models.Participante).filter(models.Participante.ativo == True).all():
+        if p.email and p.email not in emails:
+            emails.append(p.email)
+    emails = [e for e in emails if e and "@" in e]
+
+    try:
+        result = create_meet_event(
+            summary=f"Reunião {company} × {lead.name or lead.phone}",
+            date_str=data_str,
+            time_str=hora_str,
+            attendee_emails=emails or None,
+            calendar_id=cal_id,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro ao criar evento no Google: {exc}")
+
+    meet_link = result.get("meet_link") or result.get("html_link", "")
+    event_id  = result.get("event_id", "")
+
+    # Salva reunião no banco
+    meeting = models.ScheduledMeeting(
+        lead_name=lead.name or lead.phone,
+        lead_phone=lead.phone,
+        meeting_date=data_str,
+        meeting_time=hora_str,
+        meet_link=meet_link,
+        calendar_event_id=event_id,
+        status="confirmado",
+        confirmed_at=datetime.utcnow(),
+    )
+    db.add(meeting)
+
+    # Pausa o bot e marca como agendado
+    lead.bot_ativo = False
+    lead.status_interesse = "agendado"
+    db.add(models.LeadObs(
+        lead_id=lead.id,
+        texto=f"Reunião agendada para {data_str} às {hora_str}. Meet: {meet_link}",
+        autor="Sistema",
+    ))
+    db.commit()
+    db.refresh(meeting)
+
+    # Mensagem para o lead
+    _send(lead.phone, f"Reunião confirmada! Segue o link: {meet_link}", settings)
+
+    # Alerta no grupo comercial
+    vendor_group = settings.get("vendor_group_jid", "")
+    if vendor_group:
+        try:
+            from datetime import datetime as _dt
+            date_label = _dt.strptime(data_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception:
+            date_label = data_str
+        _send(vendor_group, "\n".join([
+            "🚨 *Nova reunião agendada*",
+            "",
+            f"👤 Nome: {lead.name or lead.phone}",
+            f"📅 Data: {date_label}",
+            f"⏰ Hora: {hora_str}",
+            f"🎥 Link: {meet_link}",
+        ]), settings)
+
+    return {"ok": True, "meet_link": meet_link, "event_id": event_id, "meeting_id": meeting.id}
+
+
 @app.patch("/leads/{lead_id}/transfer")
 def transfer_lead_instance(lead_id: int, body: dict, db: Session = Depends(get_db)):
     lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()

@@ -1137,8 +1137,12 @@
         <!-- Painel: Conversas -->
         <div id="modal-panel-conversas" style="display:none;flex-direction:column;" class="flex-1 overflow-hidden">
           <!-- cabeçalho do chat com botão bot -->
-          <div class="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-white gap-2">
+          <div class="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-white gap-2 flex-wrap">
             <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide flex-1">Chat WhatsApp</span>
+            <button onclick="abrirAgendarMeet()"
+              class="text-xs px-3 py-1.5 rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-medium transition flex-shrink-0">
+              📅 Agendar Meet
+            </button>
             <button onclick="abrirTransferencia()"
               class="text-xs px-3 py-1.5 rounded-full border border-indigo-300 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-medium transition flex-shrink-0">
               🔄 Transferir
@@ -1209,6 +1213,41 @@
           <button onclick="fecharTransferencia()"
             class="text-sm text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
             Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ MODAL: AGENDAR MEET ════ -->
+    <div id="meet-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+         onclick="if(event.target===this)fecharAgendarMeet()">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+        <div class="px-5 py-4 border-b border-slate-100">
+          <h3 class="font-bold text-slate-800">📅 Criar Agenda + Meet</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Evento criado no Google Calendar com link do Meet.</p>
+        </div>
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Data</label>
+            <input id="meet-data" type="date"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Horário</label>
+            <input id="meet-hora" type="time"
+              class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+          </div>
+          <div id="meet-result" class="hidden rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800 break-all"></div>
+          <div id="meet-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700"></div>
+        </div>
+        <div class="px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
+          <button onclick="fecharAgendarMeet()"
+            class="text-sm text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-md hover:bg-slate-100 transition">
+            Cancelar
+          </button>
+          <button id="meet-confirm-btn" onclick="confirmarAgendarMeet()"
+            class="text-sm px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition">
+            Criar Reunião
           </button>
         </div>
       </div>
@@ -3360,6 +3399,61 @@
 
         function fecharTransferencia() {
             document.getElementById('transfer-modal').classList.add('hidden');
+        }
+
+        function abrirAgendarMeet() {
+            if (!_chatLeadId) return;
+            // Pré-preenche com hoje + próximo horário cheio
+            const now = new Date();
+            document.getElementById('meet-data').value = now.toISOString().slice(0, 10);
+            const nextHour = new Date(now.getTime() + 3600000);
+            document.getElementById('meet-hora').value = `${String(nextHour.getHours()).padStart(2,'0')}:00`;
+            document.getElementById('meet-result').classList.add('hidden');
+            document.getElementById('meet-error').classList.add('hidden');
+            document.getElementById('meet-confirm-btn').disabled = false;
+            document.getElementById('meet-confirm-btn').textContent = 'Criar Reunião';
+            document.getElementById('meet-modal').classList.remove('hidden');
+        }
+
+        function fecharAgendarMeet() {
+            document.getElementById('meet-modal').classList.add('hidden');
+        }
+
+        async function confirmarAgendarMeet() {
+            const data = document.getElementById('meet-data').value;
+            const hora = document.getElementById('meet-hora').value;
+            if (!data || !hora) { alert('Preencha data e horário.'); return; }
+
+            const btn = document.getElementById('meet-confirm-btn');
+            btn.disabled = true;
+            btn.textContent = 'Criando...';
+            document.getElementById('meet-result').classList.add('hidden');
+            document.getElementById('meet-error').classList.add('hidden');
+
+            try {
+                const r = await fetch(`${API_BASE}/leads/${_chatLeadId}/schedule-meet`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data, hora }),
+                });
+                const json = await r.json();
+                if (!r.ok) throw new Error(json.detail || 'Erro ao criar reunião');
+
+                const resultDiv = document.getElementById('meet-result');
+                resultDiv.innerHTML = `✅ Reunião criada!<br><a href="${json.meet_link}" target="_blank" class="underline font-semibold">${json.meet_link}</a>`;
+                resultDiv.classList.remove('hidden');
+                btn.textContent = 'Criado ✓';
+
+                // Atualiza estado local do bot (foi pausado no backend)
+                _chatBotAtivo = false;
+                _renderBotToggle();
+            } catch (err) {
+                const errDiv = document.getElementById('meet-error');
+                errDiv.textContent = err.message;
+                errDiv.classList.remove('hidden');
+                btn.disabled = false;
+                btn.textContent = 'Criar Reunião';
+            }
         }
 
         async function confirmarTransferencia(instancia, nome) {
