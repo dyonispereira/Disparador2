@@ -2766,39 +2766,42 @@
             return etapa.replace(/[^a-zA-Z0-9]/g, '_');
         }
 
-        function _isPhoneStr(s) {
-            return /^\+?[\d\s\(\)\-]{7,}$/.test((s || '').trim());
-        }
+        // Chaves que indicam número de telefone — nunca mostrar no snippet
+        const _PHONE_KEYS = new Set([
+            'phone','phone_number','telefone','celular','whatsapp',
+            'PHONE','PHONE_NUMBER','TELEFONE','CELULAR','WHATSAPP',
+        ]);
 
+        // Retorna {nome, usedKey} — usedKey é a chave do form_data usada como nome (para não duplicar no snippet)
         function _resolveNome(lead) {
             const raw = (lead.name || '').trim();
-            if (raw && !_isPhoneStr(raw)) return raw;
+            const _looksLikePhone = s => /^\+?[\d\s\(\)\-]{7,}$/.test(s.trim());
+            if (raw && !_looksLikePhone(raw)) return { nome: raw, usedKey: null };
             if (lead.form_data) {
                 try {
                     const fd = JSON.parse(lead.form_data);
-                    for (const k of ['nome_completo','full_name','nome','first_name','name','NOME_COMPLETO','FULL_NAME','NOME']) {
+                    for (const k of ['nome_completo','full_name','nome','first_name','NOME_COMPLETO','FULL_NAME','NOME','FIRST_NAME']) {
                         const v = fd[k];
-                        if (v && !_isPhoneStr(String(v))) return String(v);
+                        if (v && String(v).trim()) return { nome: String(v), usedKey: k };
                     }
                 } catch {}
             }
-            return '(sem nome)';
+            return { nome: raw || '(sem nome)', usedKey: null };
         }
 
-        function _formDataSnippet(raw, maxFields = 5) {
+        // Mostra TODOS os campos do formulário exceto telefone e o campo usado como nome
+        function _formDataSnippet(raw, skipKey) {
             if (!raw) return '';
             try {
                 const d = JSON.parse(raw);
-                const _SKIP = new Set([
-                    'phone_number','phone','telefone','celular','whatsapp',
-                    'full_name','first_name','last_name','nome_completo','nome','name',
-                    'PHONE_NUMBER','PHONE','FULL_NAME','NOME_COMPLETO','NOME','NAME',
-                ]);
-                const entries = Object.entries(d)
-                    .filter(([k, v]) => !_SKIP.has(k) && !_isPhoneStr(String(v)))
-                    .slice(0, maxFields);
+                const entries = Object.entries(d).filter(([k]) =>
+                    !_PHONE_KEYS.has(k) && k !== skipKey
+                );
                 if (!entries.length) return '';
                 return `<div class="mt-1.5 pt-1.5 border-t border-slate-100 space-y-0.5">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">
+                        <i class="fa-brands fa-facebook mr-1 text-blue-400"></i>Formulário
+                    </div>
                     ${entries.map(([k, v]) =>
                         `<div class="text-xs leading-snug">
                             <span class="text-slate-400">${_escHtml(String(k))}:</span>
@@ -2810,7 +2813,7 @@
         }
 
         function _cardHTML(lead) {
-            const nome     = _resolveNome(lead);
+            const { nome, usedKey } = _resolveNome(lead);
             const badge    = INTERESSE_BADGE[lead.status_interesse] || '';
             const vend     = lead.vendedor
                 ? `<div class="text-xs text-slate-400 truncate"><i class="fa-solid fa-user-tie mr-1"></i>${_escHtml(lead.vendedor)}</div>`
@@ -2818,7 +2821,7 @@
             const obsBadge = lead.obs_count > 0
                 ? `<div class="text-xs text-indigo-400 font-medium"><i class="fa-regular fa-comment-dots mr-1"></i>${lead.obs_count}</div>`
                 : '';
-            const formSnippet = _formDataSnippet(lead.form_data);
+            const formSnippet = _formDataSnippet(lead.form_data, usedKey);
             return `<div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing hover:shadow-md transition"
                         draggable="true"
                         ondragstart="event.dataTransfer.setData('leadId','${lead.id}');event.dataTransfer.setData('fromEtapa',\`${lead.etapa}\`)"
