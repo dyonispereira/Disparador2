@@ -144,6 +144,20 @@ class WhatsAppInstance(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class DisparoLead(Base):
+    """Leads importados de planilha para disparo — completamente separado do Funil CRM."""
+    __tablename__ = "disparo_leads"
+
+    id           = Column(Integer, primary_key=True)
+    name         = Column(String, nullable=True)
+    phone        = Column(String, nullable=False)
+    status       = Column(String, default="pendente", nullable=False)  # pendente|enviado|falhou
+    campaign_name = Column(String, nullable=True)
+    sent_message = Column(String, nullable=True)
+    sent_at      = Column(DateTime, nullable=True)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
 class WhatsAppMessage(Base):
     """Log de mensagens WhatsApp por número de telefone."""
     __tablename__ = "whatsapp_messages"

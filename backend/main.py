@@ -60,6 +60,16 @@ def _run_migrations():
             "CREATE INDEX IF NOT EXISTS idx_wa_messages_phone ON whatsapp_messages(phone)",
             "ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS tipo VARCHAR NOT NULL DEFAULT 'text'",
             "ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS url_arquivo TEXT",
+            """CREATE TABLE IF NOT EXISTS disparo_leads (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR,
+                phone VARCHAR NOT NULL,
+                status VARCHAR NOT NULL DEFAULT 'pendente',
+                campaign_name VARCHAR,
+                sent_message VARCHAR,
+                sent_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
             """CREATE TABLE IF NOT EXISTS lead_obs (
                 id SERIAL PRIMARY KEY,
                 lead_id INTEGER NOT NULL REFERENCES leads(id),
@@ -619,9 +629,9 @@ def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
 
 @app.get("/leads")
 def get_leads(source: str = None, db: Session = Depends(get_db)):
-    q = db.query(models.Lead)
     if source == "csv":
-        q = q.filter(models.Lead.origem_lead == "Planilha CSV")
+        return db.query(models.DisparoLead).order_by(models.DisparoLead.id.desc()).all()
+    q = db.query(models.Lead)
     return q.all()
 
 
@@ -631,7 +641,7 @@ def export_leads_csv(db: Session = Depends(get_db)):
     from datetime import timezone, timedelta
     import io as _io
     BR_TZ = timezone(timedelta(hours=-3))
-    leads = db.query(models.Lead).filter(models.Lead.origem_lead == "Planilha CSV").all()
+    leads = db.query(models.DisparoLead).all()
     out = _io.StringIO()
     w = csv.writer(out, delimiter=";", quoting=csv.QUOTE_ALL)
     w.writerow(["Nome", "Telefone", "Status", "Mensagem Enviada", "Data Disparo (Brasília)", "Campanha"])
@@ -670,21 +680,8 @@ def delete_lead(lead_id: int, db: Session = Depends(get_db)):
 def delete_all_leads(source: str = None, db: Session = Depends(get_db)):
     try:
         if source == "csv":
-            # Remove CSV leads: se está no CRM (board_id), apenas limpa a origem; senão, deleta
-            csv_no_crm = [l.id for l in db.query(models.Lead).filter(
-                models.Lead.origem_lead == "Planilha CSV",
-                models.Lead.board_id == None
-            ).all()]
-            if csv_no_crm:
-                db.query(models.LeadObs).filter(models.LeadObs.lead_id.in_(csv_no_crm)).delete(synchronize_session=False)
-                db.query(models.Message).filter(models.Message.lead_id.in_(csv_no_crm)).delete(synchronize_session=False)
-                db.query(models.Lead).filter(models.Lead.id.in_(csv_no_crm)).delete(synchronize_session=False)
-            # Leads CSV que já estão no CRM: só remove a marcação de origem
-            for l in db.query(models.Lead).filter(
-                models.Lead.origem_lead == "Planilha CSV",
-                models.Lead.board_id != None
-            ).all():
-                l.origem_lead = None
+            # Limpa apenas a tabela de disparo — Funil CRM intacto
+            db.query(models.DisparoLead).delete()
         else:
             db.query(models.Message).delete()
             db.query(models.LeadObs).delete()
@@ -1408,25 +1405,15 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
                         ignorados += 1
                     continue
 
-                exists = db.query(models.Lead).filter(models.Lead.phone == phone).first()
+                # Tabela disparo_leads — independente do Funil CRM
+                exists = db.query(models.DisparoLead).filter(models.DisparoLead.phone == phone).first()
                 if exists:
-                    # Marca para disparo — board_id/etapa intactos (permanece no Funil CRM)
+                    exists.name = name or exists.name
                     exists.status = status_planilha
-                    exists.origem_lead = "Planilha CSV"
                     ja_existentes += 1
                     continue
 
-                # Novo lead: sem board_id/etapa para não aparecer no Funil CRM
-                lead = models.Lead(
-                    name=name,
-                    phone=phone,
-                    status=status_planilha,
-                    origem_lead="Planilha CSV",
-                    board_id=None,
-                    etapa=None,
-                )
-
-                db.add(lead)
+                db.add(models.DisparoLead(name=name, phone=phone, status=status_planilha))
                 created += 1
 
             except Exception as e:
@@ -1511,16 +1498,13 @@ def import_local_leads(db: Session = Depends(get_db)):
                 if len(phone) in [10, 11]:
                     phone = f"55{phone}"
 
-                exists = db.query(models.Lead).filter(models.Lead.phone == phone).first()
+                exists = db.query(models.DisparoLead).filter(models.DisparoLead.phone == phone).first()
                 if exists:
+                    exists.name = name or exists.name
                     exists.status = status_planilha
                     continue
 
-                lead = models.Lead(
-                    name=name, phone=phone, status=status_planilha,
-                    origem_lead="Planilha CSV", board_id=None, etapa=None,
-                )
-                db.add(lead)
+                db.add(models.DisparoLead(name=name, phone=phone, status=status_planilha))
                 created += 1
 
             except Exception as e:
@@ -1583,7 +1567,7 @@ def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
     db = SessionLocal()
     try:
         for i, (lead_id, lead_name, lead_phone) in enumerate(leads_snapshot):
-            lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+            lead = db.query(models.DisparoLead).filter(models.DisparoLead.id == lead_id).first()
             if not lead or lead.status == "enviado":
                 continue
 
@@ -1638,7 +1622,7 @@ def _run_disparo(campaign_name: str, leads_snapshot: list, templates_text: list,
             output_dir = _os.path.join(_backend_dir, "..", "dados")
             if _os.path.exists(output_dir):
                 file_path = _os.path.join(output_dir, "leads.csv")
-                all_leads = db.query(models.Lead).all()
+                all_leads = db.query(models.DisparoLead).all()
                 with open(file_path, "w", newline="", encoding="utf-8-sig") as f:
                     writer = csv.writer(f, delimiter=";", quoting=csv.QUOTE_ALL)
                     writer.writerow(["Nome", "Telefone", "Status", "Mensagem Enviada", "Data Disparo", "Campanha"])
@@ -1665,12 +1649,12 @@ async def send(
     if not templates:
         raise HTTPException(status_code=400, detail="Nenhuma mensagem cadastrada para o disparo.")
 
-    # Disparo independente do Funil CRM — inclui qualquer lead pendente
+    # Disparo usa tabela própria — independente do Funil CRM
     if lead_ids:
         ids = [int(i) for i in lead_ids.split(',') if i.strip().isdigit()]
-        q = db.query(models.Lead).filter(models.Lead.id.in_(ids))
+        q = db.query(models.DisparoLead).filter(models.DisparoLead.id.in_(ids))
     else:
-        q = db.query(models.Lead).filter(models.Lead.status == "pendente")
+        q = db.query(models.DisparoLead).filter(models.DisparoLead.status == "pendente")
     leads = q.all()
     if not leads:
         return {"ok": True, "iniciado": False, "total": 0, "message": "Nenhum lead pendente."}
