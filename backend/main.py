@@ -1410,8 +1410,9 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
 
                 exists = db.query(models.Lead).filter(models.Lead.phone == phone).first()
                 if exists:
-                    # Atualiza status para permitir novo disparo — não altera Funil CRM
+                    # Marca para disparo — board_id/etapa intactos (permanece no Funil CRM)
                     exists.status = status_planilha
+                    exists.origem_lead = "Planilha CSV"
                     ja_existentes += 1
                     continue
 
