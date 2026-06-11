@@ -1708,11 +1708,15 @@ def get_whatsapp_status():
         return {"ok": False, "error": str(e)}
 
 def _extract_b64(data: dict):
-    return (
-        data.get("base64")
-        or (data.get("qrcode") or {}).get("base64")
-        or data.get("code")
-    )
+    """Extrai somente imagens base64 válidas — ignora strings raw de QR code."""
+    candidates = [
+        data.get("base64"),
+        (data.get("qrcode") or {}).get("base64"),
+    ]
+    for c in candidates:
+        if c and isinstance(c, str) and (c.startswith("data:") or len(c) > 100):
+            return c
+    return None
 
 
 def _register_webhook_for_instance(instance_name: str, api_key: str, evolution_url: str):
@@ -1729,7 +1733,7 @@ def _register_webhook_for_instance(instance_name: str, api_key: str, evolution_u
                 "url": webhook_url,
                 "enabled": True,
                 "webhookByEvents": False,
-                "webhookBase64": False,
+                "webhookBase64": True,
                 "events": ["MESSAGES_UPSERT", "QRCODE_UPDATED", "CONNECTION_UPDATE"],
             }
         })
@@ -1765,8 +1769,15 @@ def connect_whatsapp():
                 # If QR already stored, return it immediately
                 if _qr_store.get("base64"):
                     return {"base64": _qr_store["base64"]}
-                # Trigger connect so Baileys sends QR via QRCODE_UPDATED webhook
-                requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=10)
+                # Re-registra webhook e dispara connect para gerar QR
+                _qr_store["base64"] = None
+                _register_webhook_for_instance(INSTANCE, API_KEY, EVOLUTION_URL)
+                r_conn = requests.get(f"{EVOLUTION_URL}/instance/connect/{INSTANCE}", headers=headers, timeout=15)
+                if r_conn.ok:
+                    qr = _extract_b64(r_conn.json())
+                    if qr:
+                        _qr_store["base64"] = qr
+                        return {"base64": qr}
                 return {"ok": True, "waiting": True}
 
             # Unknown state — delete and recreate
@@ -2445,7 +2456,7 @@ def configure_webhook():
             "url": webhook_url,
             "enabled": True,
             "webhookByEvents": False,
-            "webhookBase64": False,
+            "webhookBase64": True,
             "events": [_ev],
         }
     })
