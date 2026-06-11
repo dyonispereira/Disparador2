@@ -732,14 +732,14 @@
             <h2 class="text-lg font-bold mb-4 border-b pb-2">
                 <i class="fa-solid fa-robot text-emerald-500 mr-2"></i>Automação
             </h2>
-            <div class="flex items-center justify-between p-4 rounded-xl border-2 transition" id="bot-global-card">
+            <div id="bot-global-card" class="flex items-center justify-between p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50">
                 <div>
-                    <p class="font-semibold text-slate-700" id="bot-global-label">BOT ATIVO</p>
-                    <p class="text-xs text-slate-500 mt-0.5">Todos os fluxos automáticos estão funcionando normalmente.</p>
+                    <p id="bot-global-label" class="font-bold text-emerald-700">🟢 BOT ATIVO</p>
+                    <p id="bot-global-desc" class="text-xs text-slate-500 mt-0.5">Todos os fluxos automáticos estão funcionando normalmente.</p>
                 </div>
                 <button id="btn-bot-global" onclick="toggleBotGlobal()"
-                    class="relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none">
-                    <span id="bot-global-knob" class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform"></span>
+                    class="px-4 py-2 rounded-lg text-sm font-semibold transition bg-red-500 hover:bg-red-600 text-white">
+                    ⛔ Pausar Bot
                 </button>
             </div>
             <p class="text-xs text-slate-400 mt-2">
@@ -3043,28 +3043,28 @@
         }
 
         function _renderBotGlobalUI() {
-            const card  = document.getElementById('bot-global-card');
-            const label = document.getElementById('bot-global-label');
-            const btn   = document.getElementById('btn-bot-global');
-            const knob  = document.getElementById('bot-global-knob');
+            const card   = document.getElementById('bot-global-card');
+            const label  = document.getElementById('bot-global-label');
+            const desc   = document.getElementById('bot-global-desc');
+            const btn    = document.getElementById('btn-bot-global');
             const banner = document.getElementById('bot-paused-banner');
             if (!card) return;
             if (_botGlobal) {
-                card.className = 'flex items-center justify-between p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50 transition';
+                card.className  = 'flex items-center justify-between p-4 rounded-xl border-2 border-emerald-200 bg-emerald-50';
                 label.textContent = '🟢 BOT ATIVO';
-                label.className = 'font-semibold text-emerald-700';
-                btn.className = 'relative inline-flex h-7 w-14 items-center rounded-full bg-emerald-500 transition-colors focus:outline-none';
-                knob.className = 'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform translate-x-7';
+                label.className = 'font-bold text-emerald-700';
+                desc.textContent = 'Todos os fluxos automáticos estão funcionando normalmente.';
+                btn.className   = 'px-4 py-2 rounded-lg text-sm font-semibold transition bg-red-500 hover:bg-red-600 text-white';
+                btn.textContent = '⛔ Pausar Bot';
             } else {
-                card.className = 'flex items-center justify-between p-4 rounded-xl border-2 border-red-200 bg-red-50 transition';
+                card.className  = 'flex items-center justify-between p-4 rounded-xl border-2 border-red-300 bg-red-50';
                 label.textContent = '🔴 BOT PAUSADO';
-                label.className = 'font-semibold text-red-700';
-                btn.className = 'relative inline-flex h-7 w-14 items-center rounded-full bg-red-400 transition-colors focus:outline-none';
-                knob.className = 'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform translate-x-1';
+                label.className = 'font-bold text-red-700';
+                desc.textContent = 'Nenhuma resposta automática está sendo enviada. Atendimento manual.';
+                btn.className   = 'px-4 py-2 rounded-lg text-sm font-semibold transition bg-emerald-500 hover:bg-emerald-600 text-white';
+                btn.textContent = '▶️ Reativar Bot';
             }
-            if (banner) {
-                banner.classList.toggle('hidden', _botGlobal);
-            }
+            if (banner) banner.classList.toggle('hidden', _botGlobal);
         }
 
         async function toggleBotGlobal() {
