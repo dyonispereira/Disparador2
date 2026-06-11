@@ -1105,56 +1105,80 @@ def connect_whatsapp_instance(inst_id: int, db: Session = Depends(get_db)):
     ev_url = settings["evolution_url"]
     inst_name = inst.instance_name
 
-    def _get_qr_from_connect():
-        """Chama /instance/connect e extrai QR da resposta diretamente."""
-        r = requests.get(f"{ev_url}/instance/connect/{inst_name}", headers=headers, timeout=15)
-        if r.ok:
-            data = r.json()
-            return _extract_b64(data) or _extract_b64(data.get("qrcode") or {})
+    def _try_get_qr(timeout=5):
+        """Tenta buscar QR com timeout curto — retorna None se demorar."""
+        try:
+            r = requests.get(f"{ev_url}/instance/connect/{inst_name}", headers=headers, timeout=timeout)
+            if r.ok:
+                data = r.json()
+                return _extract_b64(data) or _extract_b64(data.get("qrcode") or {})
+        except Exception:
+            pass
         return None
 
+    def _do_connect_bg():
+        """Executa o fluxo completo em background para não bloquear a resposta."""
+        try:
+            state_r = requests.get(f"{ev_url}/instance/connectionState/{inst_name}", headers=headers, timeout=5)
+            if state_r.status_code != 200:
+                # Instância não existe — cria
+                requests.post(
+                    f"{ev_url}/instance/create",
+                    json={"instanceName": inst_name, "qrcode": True, "integration": "WHATSAPP-BAILEYS"},
+                    headers=headers, timeout=15,
+                )
+                _register_webhook_for_instance(inst_name, settings["api_key"], ev_url)
+                time.sleep(2)
+            else:
+                state = (state_r.json().get("instance") or {}).get("state") or state_r.json().get("state", "")
+                if state == "open":
+                    _qr_store[inst_name] = "CONNECTED"
+                    return
+                if state not in ("connecting", "close", ""):
+                    # Estado inválido — recria
+                    requests.delete(f"{ev_url}/instance/logout/{inst_name}", headers=headers, timeout=5)
+                    requests.delete(f"{ev_url}/instance/delete/{inst_name}", headers=headers, timeout=5)
+                    time.sleep(2)
+                    requests.post(
+                        f"{ev_url}/instance/create",
+                        json={"instanceName": inst_name, "qrcode": True, "integration": "WHATSAPP-BAILEYS"},
+                        headers=headers, timeout=15,
+                    )
+                    _register_webhook_for_instance(inst_name, settings["api_key"], ev_url)
+                    time.sleep(2)
+
+            # Tenta buscar QR até 30s
+            for _ in range(10):
+                qr = _try_get_qr(timeout=4)
+                if qr:
+                    _qr_store[inst_name] = qr
+                    return
+                time.sleep(3)
+        except Exception as exc:
+            print(f"[connect-bg] {inst_name}: {exc}")
+
+    import threading
     try:
-        # Verifica estado atual
-        state_r = requests.get(f"{ev_url}/instance/connectionState/{inst_name}", headers=headers, timeout=5)
+        # Se já tem QR em memória e instância está conectando, retorna imediatamente
+        if _qr_store.get(inst_name) and _qr_store[inst_name] != "CONNECTED":
+            return {"base64": _qr_store[inst_name]}
+
+        # Verifica se já está conectado
+        state_r = requests.get(f"{ev_url}/instance/connectionState/{inst_name}", headers=headers, timeout=4)
         if state_r.status_code == 200:
             state = (state_r.json().get("instance") or {}).get("state") or state_r.json().get("state", "")
             if state == "open":
                 return {"connected": True, "state": "open"}
-            if state in ("connecting", "close"):
-                qr = _get_qr_from_connect() or _qr_store.get(inst_name)
-                if qr:
-                    _qr_store[inst_name] = qr
-                    return {"base64": qr}
-                return {"ok": True, "waiting": True}
-            # Estado inválido — apaga e recria
-            requests.delete(f"{ev_url}/instance/logout/{inst_name}", headers=headers, timeout=10)
-            time.sleep(1)
-            requests.delete(f"{ev_url}/instance/delete/{inst_name}", headers=headers, timeout=10)
-            for _ in range(5):
-                time.sleep(1)
-                if requests.get(f"{ev_url}/instance/connectionState/{inst_name}", headers=headers, timeout=5).status_code == 404:
-                    break
 
-        # Cria instância nova
+        # Tenta QR rápido (3s) — se vier, ótimo; senão inicia background e retorna waiting
         _qr_store[inst_name] = None
-        create_r = requests.post(
-            f"{ev_url}/instance/create",
-            json={"instanceName": inst_name, "qrcode": True, "integration": "WHATSAPP-BAILEYS"},
-            headers=headers, timeout=15,
-        )
-        if create_r.status_code not in (200, 201):
-            return {"ok": False, "error": f"Falha ao criar instância: {create_r.text}"}
-
-        # Registra webhook para receber mensagens desta instância
-        _register_webhook_for_instance(inst_name, settings["api_key"], ev_url)
-
-        # Busca QR diretamente da resposta do connect
-        qr = _get_qr_from_connect()
+        qr = _try_get_qr(timeout=3)
         if qr:
             _qr_store[inst_name] = qr
             return {"base64": qr}
 
-        # Fallback: frontend faz polling
+        # Inicia processo em background e retorna imediatamente para o frontend
+        threading.Thread(target=_do_connect_bg, daemon=True).start()
         return {"ok": True, "waiting": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}

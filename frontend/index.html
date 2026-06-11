@@ -3306,50 +3306,69 @@
             const statusEl = document.getElementById(`inst-status-${id}`);
             if (statusEl) statusEl.textContent = '⌛ Conectando...';
             if (_instQRPollId) { clearInterval(_instQRPollId); _instQRPollId = null; }
+
+            // Abre modal imediatamente com spinner — não espera o backend
+            document.getElementById('inst-qr-title').textContent = `Conectar: ${instanceName}`;
+            document.getElementById('inst-qr-status').textContent = '⏳ Gerando QR Code...';
+            document.getElementById('inst-qr-img').src = '';
+            document.getElementById('inst-qr-modal').classList.remove('hidden');
+
+            // Polling para QR enquanto o backend processa em background
+            _instQRPollId = setInterval(async () => {
+                try {
+                    const qrR = await fetch(`${API_BASE}/whatsapp-instances/${id}/qr`);
+                    const qrD = await qrR.json();
+                    if (qrD.base64) {
+                        clearInterval(_instQRPollId);
+                        _instQRPollId = null;
+                        const img = document.getElementById('inst-qr-img');
+                        img.src = qrD.base64.startsWith('data:') ? qrD.base64 : `data:image/png;base64,${qrD.base64}`;
+                        document.getElementById('inst-qr-status').textContent = 'Escaneie com o WhatsApp';
+                        if (statusEl) statusEl.textContent = '📱 Escaneie o QR';
+                        // Polling de confirmação de conexão
+                        _instQRPollId = setInterval(async () => {
+                            try {
+                                const sR = await fetch(`${API_BASE}/whatsapp-instances/${id}/status`);
+                                const sD = await sR.json();
+                                if (sD.online) {
+                                    clearInterval(_instQRPollId); _instQRPollId = null;
+                                    document.getElementById('inst-qr-status').textContent = '✅ Conectado!';
+                                    if (statusEl) statusEl.textContent = '🟢 Online';
+                                    setTimeout(fecharInstQR, 2000);
+                                }
+                            } catch {}
+                        }, 3000);
+                    }
+                } catch {}
+            }, 2000);
+
+            // Dispara o connect em background — o polling acima já está rodando
             try {
                 const r = await fetch(`${API_BASE}/whatsapp-instances/${id}/connect`, { method: 'POST' });
                 const d = await r.json();
-
                 if (d.connected) {
+                    // Já estava conectado
+                    if (_instQRPollId) { clearInterval(_instQRPollId); _instQRPollId = null; }
                     if (statusEl) statusEl.textContent = '🟢 Online';
+                    document.getElementById('inst-qr-status').textContent = '✅ Já conectado';
+                    setTimeout(fecharInstQR, 1500);
                     return;
                 }
                 if (d.base64) {
-                    // QR chegou direto — mostra imediatamente
+                    // QR chegou rápido — atualiza a imagem no modal que já está aberto
+                    if (_instQRPollId) { clearInterval(_instQRPollId); _instQRPollId = null; }
+                    const img = document.getElementById('inst-qr-img');
+                    img.src = d.base64.startsWith('data:') ? d.base64 : `data:image/png;base64,${d.base64}`;
+                    document.getElementById('inst-qr-status').textContent = 'Escaneie com o WhatsApp';
                     if (statusEl) statusEl.textContent = '📱 Escaneie o QR';
-                    _mostrarQRInstancia(d.base64, id, instanceName);
-                    return;
-                }
-                if (d.waiting) {
-                    // Fallback: QR virá via webhook — faz polling curto
-                    if (statusEl) statusEl.textContent = '⌛ Gerando QR...';
-                    let attempts = 0;
-                    _instQRPollId = setInterval(async () => {
-                        attempts++;
-                        if (attempts > 20) {
-                            clearInterval(_instQRPollId);
-                            if (statusEl) statusEl.textContent = '❌ Timeout — tente novamente';
-                            return;
-                        }
-                        try {
-                            const qrR = await fetch(`${API_BASE}/whatsapp-instances/${id}/qr`);
-                            const qrD = await qrR.json();
-                            if (qrD.base64) {
-                                clearInterval(_instQRPollId);
-                                if (statusEl) statusEl.textContent = '📱 Escaneie o QR';
-                                _mostrarQRInstancia(qrD.base64, id, instanceName);
-                            }
-                        } catch {}
-                    }, 1500);
-                    return;
                 }
                 if (d.error) {
                     if (statusEl) statusEl.textContent = '❌ Erro';
-                    alert('Erro Evolution API: ' + d.error);
+                    document.getElementById('inst-qr-status').textContent = '❌ ' + d.error;
                 }
             } catch(e) {
-                if (statusEl) statusEl.textContent = '❌ Erro';
-                alert('Erro ao conectar: ' + e.message);
+                if (statusEl) statusEl.textContent = '❌ Erro de rede';
+                document.getElementById('inst-qr-status').textContent = '❌ Erro: ' + e.message;
             }
         }
 
