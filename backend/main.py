@@ -1952,6 +1952,9 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
                                 if not existing.form_data and flds:
                                     existing.form_data = _json.dumps(flds, ensure_ascii=False)
                                     changed = True
+                                if name and (not existing.name or existing.name == existing.phone or existing.name == phone_raw):
+                                    existing.name = name
+                                    changed = True
                                 if changed:
                                     db.commit()
                                 ignorados += 1
@@ -2086,11 +2089,25 @@ async def facebook_webhook_lead(request: Request, db: Session = Depends(get_db))
                 except Exception:
                     pass
 
-            # Upsert: se o telefone já existe, não duplica
+            # Upsert: se o telefone já existe, atualiza form_data/nome mas não duplica
             existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
             if existing:
-                print(f"[fb] lead {phone} já existe id={existing.id}")
-                results.append({"id": existing.id, "status": "already_exists", "phone": phone})
+                import json as _json
+                changed = False
+                if not existing.form_data and fields:
+                    existing.form_data = _json.dumps(fields, ensure_ascii=False)
+                    changed = True
+                # Atualiza nome se estava em branco ou igual ao telefone
+                if name and (not existing.name or existing.name == existing.phone or existing.name == phone_raw):
+                    existing.name = name
+                    changed = True
+                if fb_created and not existing.created_at:
+                    existing.created_at = fb_created
+                    changed = True
+                if changed:
+                    db.commit()
+                print(f"[fb] lead {phone} já existe id={existing.id} updated={changed}")
+                results.append({"id": existing.id, "status": "updated" if changed else "already_exists", "phone": phone})
                 continue
 
             form_id  = value.get("form_id", "") or lead_data.get("form_id", "")
