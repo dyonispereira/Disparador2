@@ -1410,17 +1410,19 @@ async def upload_leads_file(file: UploadFile = File(...), db: Session = Depends(
 
                 exists = db.query(models.Lead).filter(models.Lead.phone == phone).first()
                 if exists:
-                    if exists.origem_lead == "Planilha CSV":
-                        exists.status = status_planilha
-                    else:
-                        ja_existentes += 1
+                    # Atualiza status para permitir novo disparo — não altera Funil CRM
+                    exists.status = status_planilha
+                    ja_existentes += 1
                     continue
 
+                # Novo lead: sem board_id/etapa para não aparecer no Funil CRM
                 lead = models.Lead(
                     name=name,
                     phone=phone,
                     status=status_planilha,
                     origem_lead="Planilha CSV",
+                    board_id=None,
+                    etapa=None,
                 )
 
                 db.add(lead)
@@ -1510,11 +1512,13 @@ def import_local_leads(db: Session = Depends(get_db)):
 
                 exists = db.query(models.Lead).filter(models.Lead.phone == phone).first()
                 if exists:
-                    # Se o lead já existe, atualiza o status dele para sincronizar com a planilha
                     exists.status = status_planilha
                     continue
 
-                lead = models.Lead(name=name, phone=phone, status=status_planilha)
+                lead = models.Lead(
+                    name=name, phone=phone, status=status_planilha,
+                    origem_lead="Planilha CSV", board_id=None, etapa=None,
+                )
                 db.add(lead)
                 created += 1
 
@@ -1660,12 +1664,12 @@ async def send(
     if not templates:
         raise HTTPException(status_code=400, detail="Nenhuma mensagem cadastrada para o disparo.")
 
-    q = db.query(models.Lead).filter(models.Lead.origem_lead == "Planilha CSV")
+    # Disparo independente do Funil CRM — inclui qualquer lead pendente
     if lead_ids:
         ids = [int(i) for i in lead_ids.split(',') if i.strip().isdigit()]
-        q = q.filter(models.Lead.id.in_(ids))
+        q = db.query(models.Lead).filter(models.Lead.id.in_(ids))
     else:
-        q = q.filter(models.Lead.status != "enviado")
+        q = db.query(models.Lead).filter(models.Lead.status == "pendente")
     leads = q.all()
     if not leads:
         return {"ok": True, "iniciado": False, "total": 0, "message": "Nenhum lead pendente."}
