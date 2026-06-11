@@ -2767,45 +2767,45 @@
         }
 
         // Chaves que indicam número de telefone — nunca mostrar no snippet
-        const _PHONE_KEYS = new Set([
+        // Chaves sempre ocultadas no snippet do card (já exibidas no cabeçalho ou irrelevantes)
+        const _SKIP_FORM_KEYS = new Set([
             'phone','phone_number','telefone','celular','whatsapp',
             'PHONE','PHONE_NUMBER','TELEFONE','CELULAR','WHATSAPP',
+            'full_name','nome_completo','nome','first_name','last_name','name',
+            'FULL_NAME','NOME_COMPLETO','NOME','FIRST_NAME','LAST_NAME','NAME',
         ]);
 
-        // Retorna {nome, usedKey} — usedKey é a chave do form_data usada como nome (para não duplicar no snippet)
         function _resolveNome(lead) {
             const raw = (lead.name || '').trim();
             const _looksLikePhone = s => /^\+?[\d\s\(\)\-]{7,}$/.test(s.trim());
-            if (raw && !_looksLikePhone(raw)) return { nome: raw, usedKey: null };
+            if (raw && !_looksLikePhone(raw)) return raw;
             if (lead.form_data) {
                 try {
                     const fd = JSON.parse(lead.form_data);
                     for (const k of ['nome_completo','full_name','nome','first_name','NOME_COMPLETO','FULL_NAME','NOME','FIRST_NAME']) {
                         const v = fd[k];
-                        if (v && String(v).trim()) return { nome: String(v), usedKey: k };
+                        if (v && String(v).trim()) return String(v);
                     }
                 } catch {}
             }
-            return { nome: raw || '(sem nome)', usedKey: null };
+            return raw || '(sem nome)';
         }
 
-        // Mostra TODOS os campos do formulário exceto telefone e o campo usado como nome
-        function _formDataSnippet(raw, skipKey) {
+        // Mostra campos do formulário exceto nome/telefone (já exibidos no cabeçalho do card)
+        function _formDataSnippet(raw) {
             if (!raw) return '';
             try {
                 const d = JSON.parse(raw);
-                const entries = Object.entries(d).filter(([k]) =>
-                    !_PHONE_KEYS.has(k) && k !== skipKey
-                );
+                const entries = Object.entries(d).filter(([k]) => !_SKIP_FORM_KEYS.has(k));
                 if (!entries.length) return '';
                 return `<div class="mt-1.5 pt-1.5 border-t border-slate-100 space-y-0.5">
                     <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">
                         <i class="fa-brands fa-facebook mr-1 text-blue-400"></i>Formulário
                     </div>
                     ${entries.map(([k, v]) =>
-                        `<div class="text-xs leading-snug">
-                            <span class="text-slate-400">${_escHtml(String(k))}:</span>
-                            <span class="text-slate-600 font-medium"> ${_escHtml(String(v))}</span>
+                        `<div class="text-xs leading-snug overflow-hidden">
+                            <span class="text-slate-400 break-all">${_escHtml(String(k))}:</span>
+                            <span class="text-slate-600 font-medium break-all"> ${_escHtml(String(v))}</span>
                         </div>`
                     ).join('')}
                 </div>`;
@@ -2813,7 +2813,7 @@
         }
 
         function _cardHTML(lead) {
-            const { nome, usedKey } = _resolveNome(lead);
+            const nome     = _resolveNome(lead);
             const badge    = INTERESSE_BADGE[lead.status_interesse] || '';
             const vend     = lead.vendedor
                 ? `<div class="text-xs text-slate-400 truncate"><i class="fa-solid fa-user-tie mr-1"></i>${_escHtml(lead.vendedor)}</div>`
@@ -2821,7 +2821,7 @@
             const obsBadge = lead.obs_count > 0
                 ? `<div class="text-xs text-indigo-400 font-medium"><i class="fa-regular fa-comment-dots mr-1"></i>${lead.obs_count}</div>`
                 : '';
-            const formSnippet = _formDataSnippet(lead.form_data, usedKey);
+            const formSnippet = _formDataSnippet(lead.form_data);
             return `<div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing hover:shadow-md transition"
                         draggable="true"
                         ondragstart="event.dataTransfer.setData('leadId','${lead.id}');event.dataTransfer.setData('fromEtapa',\`${lead.etapa}\`)"
