@@ -2766,22 +2766,55 @@
             return etapa.replace(/[^a-zA-Z0-9]/g, '_');
         }
 
-        function _formDataSnippet(raw, maxFields = 3) {
+        function _isPhoneStr(s) {
+            return /^\+?[\d\s\(\)\-]{7,}$/.test((s || '').trim());
+        }
+
+        function _resolveNome(lead) {
+            const raw = (lead.name || '').trim();
+            if (raw && !_isPhoneStr(raw)) return raw;
+            if (lead.form_data) {
+                try {
+                    const fd = JSON.parse(lead.form_data);
+                    for (const k of ['nome_completo','full_name','nome','first_name','name','NOME_COMPLETO','FULL_NAME','NOME']) {
+                        const v = fd[k];
+                        if (v && !_isPhoneStr(String(v))) return String(v);
+                    }
+                } catch {}
+            }
+            return '(sem nome)';
+        }
+
+        function _formDataSnippet(raw, maxFields = 5) {
             if (!raw) return '';
             try {
                 const d = JSON.parse(raw);
-                const _SKIP = new Set(['phone_number','phone','telefone','celular','whatsapp','full_name','first_name','last_name','nome_completo','nome','name']);
-                const entries = Object.entries(d).filter(([k]) => !_SKIP.has(k)).slice(0, maxFields);
+                const _SKIP = new Set([
+                    'phone_number','phone','telefone','celular','whatsapp',
+                    'full_name','first_name','last_name','nome_completo','nome','name',
+                    'PHONE_NUMBER','PHONE','FULL_NAME','NOME_COMPLETO','NOME','NAME',
+                ]);
+                const entries = Object.entries(d)
+                    .filter(([k, v]) => !_SKIP.has(k) && !_isPhoneStr(String(v)))
+                    .slice(0, maxFields);
                 if (!entries.length) return '';
-                return `<div class="mt-1 space-y-0.5 border-t border-slate-100 pt-1">${
-                    entries.map(([k,v]) => `<div class="text-xs text-slate-500 truncate"><span class="font-medium text-slate-400">${k}:</span> ${v}</div>`).join('')
-                }</div>`;
-            } catch(e) { return ''; }
+                return `<div class="mt-1.5 pt-1.5 border-t border-slate-100 space-y-0.5">
+                    ${entries.map(([k, v]) =>
+                        `<div class="text-xs leading-snug">
+                            <span class="text-slate-400">${_escHtml(String(k))}:</span>
+                            <span class="text-slate-600 font-medium"> ${_escHtml(String(v))}</span>
+                        </div>`
+                    ).join('')}
+                </div>`;
+            } catch { return ''; }
         }
 
         function _cardHTML(lead) {
-            const badge   = INTERESSE_BADGE[lead.status_interesse] || '';
-            const vend    = lead.vendedor ? `<div class="text-xs text-slate-400 truncate"><i class="fa-solid fa-user-tie mr-1"></i>${lead.vendedor}</div>` : '';
+            const nome     = _resolveNome(lead);
+            const badge    = INTERESSE_BADGE[lead.status_interesse] || '';
+            const vend     = lead.vendedor
+                ? `<div class="text-xs text-slate-400 truncate"><i class="fa-solid fa-user-tie mr-1"></i>${_escHtml(lead.vendedor)}</div>`
+                : '';
             const obsBadge = lead.obs_count > 0
                 ? `<div class="text-xs text-indigo-400 font-medium"><i class="fa-regular fa-comment-dots mr-1"></i>${lead.obs_count}</div>`
                 : '';
@@ -2790,12 +2823,12 @@
                         draggable="true"
                         ondragstart="event.dataTransfer.setData('leadId','${lead.id}');event.dataTransfer.setData('fromEtapa',\`${lead.etapa}\`)"
                         onclick="abrirModal(${JSON.stringify(lead).replace(/"/g,'&quot;')})">
-                <div class="font-semibold text-sm text-slate-800 truncate mb-1">${lead.name || '(sem nome)'}</div>
-                <div class="text-xs text-slate-500 mb-1"><i class="fa-solid fa-phone mr-1"></i>${lead.phone}</div>
+                <div class="font-semibold text-sm text-slate-800 truncate mb-0.5">${_escHtml(nome)}</div>
+                <div class="text-xs text-slate-400 mb-1"><i class="fa-solid fa-phone mr-1"></i>${lead.phone}</div>
                 ${lead.created_at ? `<div class="text-xs text-slate-400 mb-1"><i class="fa-regular fa-calendar mr-1"></i>${lead.created_at}</div>` : ''}
                 ${badge ? `<div class="mb-1">${badge}</div>` : ''}
                 ${formSnippet}
-                <div class="flex items-center justify-between gap-2 mt-1">
+                <div class="flex items-center justify-between gap-2 mt-1.5">
                   ${vend}
                   ${obsBadge}
                 </div>
