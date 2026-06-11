@@ -2071,6 +2071,12 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
                                 if name and (not existing.name or existing.name == existing.phone or existing.name == phone_raw):
                                     existing.name = name
                                     changed = True
+                                # Garante que o lead está no Funil CRM
+                                if not existing.board_id:
+                                    existing.board_id = 1
+                                    existing.etapa = "Novo Lead"
+                                    existing.origem_lead = existing.origem_lead or "Facebook"
+                                    changed = True
                                 if changed:
                                     db.commit()
                                 ignorados += 1
@@ -2219,6 +2225,12 @@ async def facebook_webhook_lead(request: Request, db: Session = Depends(get_db))
                     changed = True
                 if fb_created and not existing.created_at:
                     existing.created_at = fb_created
+                    changed = True
+                # Garante que o lead está no Funil CRM
+                if not existing.board_id:
+                    existing.board_id = 1
+                    existing.etapa = "Novo Lead"
+                    existing.origem_lead = existing.origem_lead or "Facebook"
                     changed = True
                 if changed:
                     db.commit()
