@@ -172,6 +172,156 @@ async def _reminder_loop():
                 db.close()
 
 
+def _facebook_sync_incremental(db, s: dict) -> int:
+    """Busca leads novos do Facebook desde o último sync. Retorna quantidade criada."""
+    import json as _json, time as _t
+    from config import save_settings
+
+    page_token = s.get("fb_page_access_token", "").strip()
+    if not page_token:
+        return 0
+
+    app_secret = s.get("fb_app_secret", "").strip()
+    last_sync  = int(s.get("fb_last_sync", 0) or 0)
+    if not last_sync:
+        last_sync = int(_t.time()) - 7 * 86400  # primeira vez: últimos 7 dias
+
+    criados = 0
+    erros   = []
+
+    try:
+        accounts = requests.get(
+            "https://graph.facebook.com/v25.0/me/accounts",
+            params=_fb_params(page_token, app_secret, {"fields": "id,name,access_token"}),
+            timeout=15,
+        ).json()
+        if accounts.get("data"):
+            pages = [{"id": p["id"], "access_token": p["access_token"], "name": p.get("name", "")} for p in accounts["data"]]
+        else:
+            me = requests.get(
+                "https://graph.facebook.com/v25.0/me",
+                params=_fb_params(page_token, app_secret, {"fields": "id,name"}),
+                timeout=15,
+            ).json()
+            if "error" in me:
+                raise Exception(f"Token inválido: {me['error'].get('message', '')}")
+            pages = [{"id": me.get("id", "me"), "access_token": page_token, "name": me.get("name", "")}]
+
+        filtering = _json.dumps([{"field": "time_created", "operator": "GREATER_THAN", "value": last_sync}])
+
+        for page in pages:
+            page_tok = page["access_token"]
+            forms = requests.get(
+                f"https://graph.facebook.com/v25.0/{page['id']}/leadgen_forms",
+                params=_fb_params(page_tok, app_secret, {"fields": "id,name"}),
+                timeout=15,
+            ).json().get("data", [])
+
+            for form in forms:
+                form_id   = form["id"]
+                form_name = form.get("name", form_id)
+                next_url  = f"https://graph.facebook.com/v25.0/{form_id}/leads"
+                p = _fb_params(page_tok, app_secret, {
+                    "fields": "field_data,created_time",
+                    "filtering": filtering,
+                    "limit": 100,
+                })
+
+                while next_url:
+                    resp = requests.get(next_url, params=p, timeout=15).json()
+                    p = {}
+                    if "error" in resp:
+                        erros.append(f"form {form_name}: {resp['error'].get('message', '')}")
+                        break
+                    for lead_data in resp.get("data", []):
+                        try:
+                            flds = {f["name"]: f["values"][0] for f in lead_data.get("field_data", []) if f.get("values")}
+                            phone_raw = (
+                                flds.get("phone_number") or flds.get("phone")
+                                or flds.get("telefone")  or flds.get("celular")
+                                or flds.get("whatsapp")  or ""
+                            )
+                            name = (
+                                flds.get("full_name") or flds.get("nome_completo")
+                                or flds.get("nome")   or flds.get("name") or ""
+                            )
+                            phone = _normalizar_telefone(phone_raw)
+                            if not phone:
+                                continue
+
+                            fb_time_str = lead_data.get("created_time", "")
+                            fb_created  = None
+                            if fb_time_str:
+                                try:
+                                    fb_created = datetime.strptime(fb_time_str[:19], "%Y-%m-%dT%H:%M:%S")
+                                except Exception:
+                                    pass
+
+                            existing = db.query(models.Lead).filter(models.Lead.phone == phone).first()
+                            if existing:
+                                changed = False
+                                if not existing.board_id:
+                                    existing.board_id = 1
+                                    existing.etapa = "Novo Lead"
+                                    changed = True
+                                if name and not existing.name:
+                                    existing.name = name
+                                    changed = True
+                                if changed:
+                                    db.commit()
+                                continue
+
+                            db.add(models.Lead(
+                                name=name or phone, phone=phone, status="pendente",
+                                etapa="Novo Lead", board_id=1,
+                                campaign_name=f"Facebook · {form_name}",
+                                origem_lead="Facebook",
+                                created_at=fb_created,
+                                form_data=_json.dumps(flds, ensure_ascii=False),
+                            ))
+                            db.commit()
+                            criados += 1
+                        except Exception:
+                            pass
+                    next_url = resp.get("paging", {}).get("next")
+
+    except Exception as exc:
+        erros.append(str(exc))
+        print(f"[fb-sync] erro: {exc}")
+
+    # Salva timestamp e resultado do sync
+    now = int(_t.time())
+    s_fresh = s.copy()
+    s_fresh["fb_last_sync"]         = now
+    s_fresh["fb_last_sync_at"]      = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    s_fresh["fb_last_sync_criados"] = criados
+    s_fresh["fb_last_sync_erro"]    = erros[0] if erros else ""
+    save_settings(s_fresh)
+
+    if criados > 0:
+        print(f"[fb-sync] ✓ {criados} novo(s) lead(s) importado(s)")
+    if erros:
+        print(f"[fb-sync] erros: {erros}")
+    return criados
+
+
+async def _facebook_sync_loop():
+    """Polling automático do Facebook a cada 5 minutos."""
+    from config import load_settings
+    while True:
+        await asyncio.sleep(300)
+        s = load_settings()
+        if not s.get("fb_page_access_token", "").strip():
+            continue
+        db = SessionLocal()
+        try:
+            _facebook_sync_incremental(db, s)
+        except Exception as exc:
+            print(f"[fb-sync-loop] erro inesperado: {exc}")
+        finally:
+            db.close()
+
+
 app = FastAPI()
 
 # Rotas públicas — não exigem token
@@ -198,6 +348,7 @@ async def auth_middleware(request: Request, call_next):
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(_reminder_loop())
+    asyncio.create_task(_facebook_sync_loop())
 
 
 app.add_middleware(
@@ -2017,6 +2168,29 @@ def _fb_params(token: str, app_secret: str, extra: dict = None) -> dict:
     if extra:
         p.update(extra)
     return p
+
+
+@app.get("/facebook/sync-status")
+def facebook_sync_status():
+    from config import load_settings
+    s = load_settings()
+    return {
+        "ativo": bool(s.get("fb_page_access_token", "").strip()),
+        "last_sync_at": s.get("fb_last_sync_at"),
+        "last_sync_criados": s.get("fb_last_sync_criados", 0),
+        "last_sync_erro": s.get("fb_last_sync_erro", ""),
+        "intervalo_min": 5,
+    }
+
+
+@app.post("/facebook/sync-now")
+def facebook_sync_now(db: Session = Depends(get_db)):
+    from config import load_settings
+    s = load_settings()
+    if not s.get("fb_page_access_token", "").strip():
+        raise HTTPException(status_code=400, detail="Page Access Token não configurado")
+    criados = _facebook_sync_incremental(db, s)
+    return {"ok": True, "criados": criados}
 
 
 @app.post("/facebook/extend-token")
