@@ -3370,33 +3370,63 @@
             document.getElementById('inst-qr-img').src = '';
             document.getElementById('inst-qr-modal').classList.remove('hidden');
 
-            // Polling para QR enquanto o backend processa em background
+            // Helper para iniciar polling de status após QR escaneado
+            function _iniciarPollingStatus() {
+                _instQRPollId = setInterval(async () => {
+                    try {
+                        const sR = await fetch(`${API_BASE}/whatsapp-instances/${id}/status`);
+                        const sD = await sR.json();
+                        if (sD.online) {
+                            clearInterval(_instQRPollId); _instQRPollId = null;
+                            document.getElementById('inst-qr-status').textContent = '✅ Conectado!';
+                            if (statusEl) statusEl.textContent = '🟢 Online';
+                            setTimeout(fecharInstQR, 2000);
+                        }
+                    } catch {}
+                }, 3000);
+            }
+
+            // Helper para mostrar QR e iniciar polling de status
+            function _mostrarQRNoModal(b64) {
+                const img = document.getElementById('inst-qr-img');
+                img.src = b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`;
+                document.getElementById('inst-qr-status').textContent = 'Escaneie com o WhatsApp';
+                if (statusEl) statusEl.textContent = '📱 Escaneie o QR';
+                _iniciarPollingStatus();
+            }
+
+            // Polling para QR com timeout de 90s
+            let _qrPollCount = 0;
             _instQRPollId = setInterval(async () => {
+                _qrPollCount++;
                 try {
                     const qrR = await fetch(`${API_BASE}/whatsapp-instances/${id}/qr`);
                     const qrD = await qrR.json();
+                    if (qrD.connected) {
+                        clearInterval(_instQRPollId); _instQRPollId = null;
+                        if (statusEl) statusEl.textContent = '🟢 Online';
+                        document.getElementById('inst-qr-status').textContent = '✅ Já conectado';
+                        setTimeout(fecharInstQR, 1500);
+                        return;
+                    }
+                    if (qrD.error) {
+                        clearInterval(_instQRPollId); _instQRPollId = null;
+                        if (statusEl) statusEl.textContent = '❌ Erro';
+                        document.getElementById('inst-qr-status').textContent = '❌ Falha ao gerar QR. Tente novamente.';
+                        return;
+                    }
                     if (qrD.base64) {
-                        clearInterval(_instQRPollId);
-                        _instQRPollId = null;
-                        const img = document.getElementById('inst-qr-img');
-                        img.src = qrD.base64.startsWith('data:') ? qrD.base64 : `data:image/png;base64,${qrD.base64}`;
-                        document.getElementById('inst-qr-status').textContent = 'Escaneie com o WhatsApp';
-                        if (statusEl) statusEl.textContent = '📱 Escaneie o QR';
-                        // Polling de confirmação de conexão
-                        _instQRPollId = setInterval(async () => {
-                            try {
-                                const sR = await fetch(`${API_BASE}/whatsapp-instances/${id}/status`);
-                                const sD = await sR.json();
-                                if (sD.online) {
-                                    clearInterval(_instQRPollId); _instQRPollId = null;
-                                    document.getElementById('inst-qr-status').textContent = '✅ Conectado!';
-                                    if (statusEl) statusEl.textContent = '🟢 Online';
-                                    setTimeout(fecharInstQR, 2000);
-                                }
-                            } catch {}
-                        }, 3000);
+                        clearInterval(_instQRPollId); _instQRPollId = null;
+                        _mostrarQRNoModal(qrD.base64);
+                        return;
                     }
                 } catch {}
+                // Timeout de 90s (45 tentativas × 2s)
+                if (_qrPollCount >= 45) {
+                    clearInterval(_instQRPollId); _instQRPollId = null;
+                    if (statusEl) statusEl.textContent = '❌ Timeout';
+                    document.getElementById('inst-qr-status').textContent = '❌ QR não chegou em 90s. Tente novamente.';
+                }
             }, 2000);
 
             // Dispara o connect em background — o polling acima já está rodando
@@ -3412,12 +3442,9 @@
                     return;
                 }
                 if (d.base64) {
-                    // QR chegou rápido — atualiza a imagem no modal que já está aberto
+                    // QR chegou rápido na resposta do connect
                     if (_instQRPollId) { clearInterval(_instQRPollId); _instQRPollId = null; }
-                    const img = document.getElementById('inst-qr-img');
-                    img.src = d.base64.startsWith('data:') ? d.base64 : `data:image/png;base64,${d.base64}`;
-                    document.getElementById('inst-qr-status').textContent = 'Escaneie com o WhatsApp';
-                    if (statusEl) statusEl.textContent = '📱 Escaneie o QR';
+                    _mostrarQRNoModal(d.base64);
                 }
                 if (d.error) {
                     if (statusEl) statusEl.textContent = '❌ Erro';

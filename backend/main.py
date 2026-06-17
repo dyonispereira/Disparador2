@@ -1143,22 +1143,35 @@ def connect_whatsapp_instance(inst_id: int, db: Session = Depends(get_db)):
                     )
                     _register_webhook_for_instance(inst_name, settings["api_key"], ev_url)
                     time.sleep(2)
+                else:
+                    # close/connecting — garante webhook registrado para receber QRCODE_UPDATED
+                    _register_webhook_for_instance(inst_name, settings["api_key"], ev_url)
 
-            # Tenta buscar QR até 30s
-            for _ in range(10):
-                qr = _try_get_qr(timeout=4)
+            # Tenta buscar QR até 90s (Evolution API leva ~2s de delay interno no primeiro request)
+            for _ in range(15):
+                qr = _try_get_qr(timeout=8)
                 if qr:
                     _qr_store[inst_name] = qr
                     return
-                time.sleep(3)
+                time.sleep(4)
+
+            # Esgotou tentativas sem QR — sinaliza erro para o frontend
+            if not _qr_store.get(inst_name):
+                _qr_store[inst_name] = "ERROR"
+                print(f"[connect-bg] {inst_name}: QR não chegou após 90s")
         except Exception as exc:
+            _qr_store[inst_name] = "ERROR"
             print(f"[connect-bg] {inst_name}: {exc}")
 
     import threading
     try:
         # Se já tem QR em memória e instância está conectando, retorna imediatamente
-        if _qr_store.get(inst_name) and _qr_store[inst_name] != "CONNECTED":
-            return {"base64": _qr_store[inst_name]}
+        _cached = _qr_store.get(inst_name)
+        if _cached and _cached not in ("CONNECTED", "ERROR"):
+            return {"base64": _cached}
+        # Limpa estado de erro anterior para nova tentativa
+        if _cached == "ERROR":
+            _qr_store[inst_name] = None
 
         # Verifica se já está conectado
         state_r = requests.get(f"{ev_url}/instance/connectionState/{inst_name}", headers=headers, timeout=4)
@@ -1186,7 +1199,12 @@ def get_instance_qr(inst_id: int, db: Session = Depends(get_db)):
     inst = db.query(models.WhatsAppInstance).filter(models.WhatsAppInstance.id == inst_id).first()
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada")
-    return {"base64": _qr_store.get(inst.instance_name)}
+    val = _qr_store.get(inst.instance_name)
+    if val == "CONNECTED":
+        return {"connected": True, "base64": None}
+    if val == "ERROR":
+        return {"error": True, "base64": None}
+    return {"base64": val}
 
 
 @app.post("/leads/{lead_id}/schedule-meet")
