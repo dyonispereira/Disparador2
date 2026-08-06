@@ -2612,6 +2612,10 @@ async def webhook_evolution(request: Request):
 
     print(f"[webhook] raw payload keys: {list(payload.keys())}")
 
+    # Instância que efetivamente recebeu a mensagem — pode divergir da
+    # instância padrão em settings.json se houver múltiplos números.
+    instance_name = payload.get("instance", "")
+
     event = payload.get("event", "")
 
     # Capture QR code — Evolution API v2 sends either QRCODE_UPDATED or connection.update with qr
@@ -2692,7 +2696,7 @@ async def webhook_evolution(request: Request):
                 from config import load_settings as _ls
                 _s = _ls()
                 r = requests.post(
-                    f"{_s['evolution_url']}/chat/getBase64FromMediaMessage/{_s['instance']}",
+                    f"{_s['evolution_url']}/chat/getBase64FromMediaMessage/{instance_name or _s['instance']}",
                     json={"message": data, "convertToMp4": False},
                     headers={"apikey": _s["api_key"], "Content-Type": "application/json"},
                     timeout=20,
@@ -2778,14 +2782,16 @@ async def webhook_evolution(request: Request):
                 )
                 try:
                     headers = {"apikey": settings["api_key"], "Content-Type": "application/json"}
-                    requests.post(
-                        f"{settings['evolution_url']}/message/sendText/{settings['instance']}",
+                    alert_resp = requests.post(
+                        f"{settings['evolution_url']}/message/sendText/{instance_name or settings['instance']}",
                         json={"number": vendor_jid, "text": alert},
                         headers=headers,
                         timeout=10,
                     )
-                except Exception:
-                    pass
+                    if not alert_resp.ok:
+                        print(f"[fb-alert] falha ao enviar pro grupo: {alert_resp.status_code} {alert_resp.text[:300]}")
+                except Exception as _alert_exc:
+                    print(f"[fb-alert] erro ao enviar pro grupo: {_alert_exc}")
 
             # Salva a mensagem recebida no histórico de chat
             msg_content = text.strip() if text.strip() else ("[áudio]" if audio_data else "")
