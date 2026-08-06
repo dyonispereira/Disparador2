@@ -629,9 +629,11 @@ def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None,
         .all()
     )
     for row in por_etapa_q:
-        key = row.etapa or etapas[0] if etapas else "Novo Lead"
+        # Mesma regra do /leads/kanban: etapa ausente ou que não existe mais
+        # no quadro atual cai no primeiro card, em vez de ser descartada.
+        key = row.etapa if row.etapa in por_etapa else (etapas[0] if etapas else None)
         if key in por_etapa:
-            por_etapa[key] = row.total
+            por_etapa[key] += row.total
 
     # ── Indicador de Ticket Médio por etapa ─────────────────────
     ticket_map = _json.loads(board.ticket_medio_json) if (board and board.ticket_medio_json) else {}
