@@ -2981,7 +2981,7 @@
             });
         }
 
-        let _selectedLeads = new Set();
+        let _kanbanSelected = new Set();
 
         function renderKanban() {
             if (!_kanbanData) return;
@@ -3046,35 +3046,35 @@
             const bar = document.getElementById('kanban-bulk-bar');
             const count = document.getElementById('kanban-bulk-count');
             if (!bar) return;
-            if (_selectedLeads.size > 0) {
+            if (_kanbanSelected.size > 0) {
                 bar.classList.remove('hidden');
-                count.textContent = _selectedLeads.size;
+                count.textContent = _kanbanSelected.size;
             } else {
                 bar.classList.add('hidden');
             }
         }
 
         function _toggleLeadSelect(leadId, checked) {
-            if (checked) _selectedLeads.add(leadId);
-            else _selectedLeads.delete(leadId);
+            if (checked) _kanbanSelected.add(leadId);
+            else _kanbanSelected.delete(leadId);
             _updateBulkBar();
         }
 
         function limparSelecao() {
-            _selectedLeads.clear();
+            _kanbanSelected.clear();
             renderKanban();
         }
 
         async function moverSelecionados() {
             const etapa = document.getElementById('kanban-bulk-etapa-sel').value;
-            if (!etapa || _selectedLeads.size === 0) return;
+            if (!etapa || _kanbanSelected.size === 0) return;
             try {
                 await fetch(`${API_BASE}/leads/bulk-etapa`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lead_ids: [..._selectedLeads], etapa }),
+                    body: JSON.stringify({ lead_ids: [..._kanbanSelected], etapa }),
                 });
-                _selectedLeads.clear();
+                _kanbanSelected.clear();
                 await carregarKanban();
             } catch (e) {
                 console.error('[bulk-move]', e);
@@ -3142,7 +3142,7 @@
                 ? `<div class="text-xs text-indigo-400 font-medium"><i class="fa-regular fa-comment-dots mr-1"></i>${lead.obs_count}</div>`
                 : '';
             const formSnippet = _formDataSnippet(lead.form_data);
-            const checked = _selectedLeads.has(lead.id) ? 'checked' : '';
+            const checked = _kanbanSelected.has(lead.id) ? 'checked' : '';
             return `<div class="relative bg-white rounded-lg p-3 pl-8 shadow-sm border ${checked ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-slate-100'} cursor-grab active:cursor-grabbing hover:shadow-md transition"
                         draggable="true"
                         ondragstart="event.dataTransfer.setData('leadId','${lead.id}');event.dataTransfer.setData('fromEtapa',\`${lead.etapa}\`)"
