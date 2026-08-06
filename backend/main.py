@@ -2286,18 +2286,40 @@ def facebook_extend_token():
 
 
 @app.post("/facebook/import-all-leads")
-def facebook_import_all_leads(db: Session = Depends(get_db)):
+def facebook_import_all_leads(data_inicio: str = None, data_fim: str = None, db: Session = Depends(get_db)):
     from config import load_settings
+    import json as _json
+    from datetime import timedelta as _td
     s = load_settings()
     page_token = s.get("fb_page_access_token", "").strip()
     app_secret = s.get("fb_app_secret", "").strip()
     if not page_token:
         raise HTTPException(status_code=400, detail="Page Access Token não configurado")
 
+    # Filtro de período (opcional) — restringe pelo campo time_created da Graph API
+    fb_filtering = None
+    if data_inicio or data_fim:
+        conditions = []
+        if data_inicio:
+            try:
+                ts_ini = int(datetime.strptime(data_inicio, "%Y-%m-%d").timestamp())
+                conditions.append({"field": "time_created", "operator": "GREATER_THAN", "value": ts_ini})
+            except ValueError:
+                raise HTTPException(status_code=400, detail="data_inicio inválida (use YYYY-MM-DD)")
+        if data_fim:
+            try:
+                ts_fim = int((datetime.strptime(data_fim, "%Y-%m-%d") + _td(days=1)).timestamp())
+                conditions.append({"field": "time_created", "operator": "LESS_THAN", "value": ts_fim})
+            except ValueError:
+                raise HTTPException(status_code=400, detail="data_fim inválida (use YYYY-MM-DD)")
+        fb_filtering = _json.dumps(conditions)
+
     criados = 0
     ignorados = 0
     erros = []
     debug = []
+    if fb_filtering:
+        debug.append(f"Filtro de período aplicado: {data_inicio or '(sem início)'} até {data_fim or '(sem fim)'}")
 
     try:
         accounts = requests.get("https://graph.facebook.com/v25.0/me/accounts",
@@ -2338,7 +2360,10 @@ def facebook_import_all_leads(db: Session = Depends(get_db)):
                 leads_count = form.get("leads_count", "?")
                 debug.append(f"  Formulário '{form_name}': {leads_count} lead(s) no Facebook")
                 next_url  = f"https://graph.facebook.com/v25.0/{form_id}/leads"
-                p = _fb_params(page_tok, app_secret, {"fields": "field_data,created_time", "limit": 100})
+                p_extra = {"fields": "field_data,created_time", "limit": 100}
+                if fb_filtering:
+                    p_extra["filtering"] = fb_filtering
+                p = _fb_params(page_tok, app_secret, p_extra)
 
                 while next_url:
                     resp = requests.get(next_url, params=p, timeout=15).json()
