@@ -980,6 +980,21 @@
           <div id="dash-funil" class="space-y-2.5"></div>
         </div>
 
+        <!-- Chart: Entrada de Leads x Clientes (mensal) -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 class="text-sm font-semibold text-slate-600 flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-indigo-400"></i> Entrada de Leads x Clientes (mensal)
+            </h3>
+            <div class="flex items-center gap-4 text-xs">
+              <span class="flex items-center gap-1.5 text-slate-500"><span class="w-2.5 h-2.5 rounded-sm bg-indigo-400 inline-block"></span> Leads entrada</span>
+              <span class="flex items-center gap-1.5 text-slate-500"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span> Viraram cliente</span>
+              <span id="dash-mensal-taxa-media" class="font-semibold text-indigo-600"></span>
+            </div>
+          </div>
+          <div class="relative h-72"><canvas id="chart-mensal"></canvas></div>
+        </div>
+
         <!-- Chart: Leads por Etapa -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
           <h3 class="text-sm font-semibold text-slate-600 mb-4 flex items-center gap-2">
@@ -2777,6 +2792,42 @@
                     options: { responsive: true, maintainAspectRatio: false, cutout: '65%',
                         plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
                 });
+            }
+
+            // Chart: Entrada de Leads x Clientes (mensal)
+            const ctxMensal = document.getElementById('chart-mensal')?.getContext('2d');
+            if (ctxMensal && data.mensal?.length) {
+                _dashCharts.mensal = new Chart(ctxMensal, {
+                    data: {
+                        labels: data.mensal.map(m => m.mes_label),
+                        datasets: [
+                            { type: 'bar', label: 'Leads entrada', data: data.mensal.map(m => m.leads_entrada),
+                                backgroundColor: '#818cf8', borderRadius: 5, order: 2 },
+                            { type: 'bar', label: 'Viraram cliente', data: data.mensal.map(m => m.leads_clientes),
+                                backgroundColor: '#10b981', borderRadius: 5, order: 2 },
+                            { type: 'line', label: 'Taxa de conversão', data: data.mensal.map(m => m.taxa_conversao),
+                                borderColor: '#f59e0b', backgroundColor: '#f59e0b', yAxisID: 'y1',
+                                tension: 0.3, order: 1 },
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y:  { beginAtZero: true, ticks: { stepSize: 1 }, title: { display: true, text: 'Leads' } },
+                            y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false },
+                                  title: { display: true, text: '% conversão' },
+                                  ticks: { callback: v => v + '%' } },
+                            x:  { grid: { display: false } },
+                        }
+                    }
+                });
+                const validas = data.mensal.filter(m => m.leads_entrada > 0);
+                const taxaMedia = validas.length
+                    ? Math.round(validas.reduce((s, m) => s + m.taxa_conversao, 0) / validas.length * 10) / 10
+                    : 0;
+                const elTaxa = document.getElementById('dash-mensal-taxa-media');
+                if (elTaxa) elTaxa.textContent = `Média: ${taxaMedia}%`;
             }
 
             // Chart: Leads por Etapa (horizontal bar)

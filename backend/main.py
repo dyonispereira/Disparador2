@@ -721,6 +721,34 @@ def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None,
     n_proposta  = _count(*ETAPAS_POS_PROPOSTA)
     n_fechados  = _count(*ETAPAS_FECHADO)
 
+    # ── Indicador mensal: entrada de leads x viraram cliente ─────
+    # "Cliente" = lead cuja etapa atual está entre as etapas de fechamento.
+    # Agrupado pelo mês em que o lead entrou (created_at).
+    def _add_months(dt, n):
+        total_m = dt.month - 1 + n
+        y = dt.year + total_m // 12
+        m = total_m % 12 + 1
+        return datetime(y, m, 1)
+
+    _MESES_PT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+    hoje_ini = datetime(datetime.utcnow().year, datetime.utcnow().month, 1)
+    mensal = []
+    for i in range(5, -1, -1):
+        m_ini = _add_months(hoje_ini, -i)
+        m_fim = _add_months(m_ini, 1)
+        mes_q = db.query(models.Lead).filter(
+            models.Lead.created_at >= m_ini, models.Lead.created_at < m_fim, filtro_board
+        )
+        leads_entrada  = mes_q.count()
+        leads_clientes = mes_q.filter(models.Lead.etapa.in_(ETAPAS_FECHADO)).count()
+        mensal.append({
+            "mes": m_ini.strftime("%Y-%m"),
+            "mes_label": f"{_MESES_PT[m_ini.month - 1]}/{str(m_ini.year)[2:]}",
+            "leads_entrada": leads_entrada,
+            "leads_clientes": leads_clientes,
+            "taxa_conversao": round(leads_clientes / leads_entrada * 100, 1) if leads_entrada else 0,
+        })
+
     def _pct(n): return round(n / total * 100, 1) if total else 0
 
     funil = [
@@ -762,6 +790,7 @@ def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None,
         "por_interesse": por_interesse,
         "por_vendedor": por_vendedor,
         "indicador_ticket": indicador_ticket,
+        "mensal": mensal,
     }
 
 
