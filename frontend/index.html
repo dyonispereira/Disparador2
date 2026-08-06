@@ -879,10 +879,27 @@
             <option value="morno">🌡️ Morno</option>
             <option value="frio">🧊 Frio</option>
           </select>
+          <select id="kanban-sort-data" onchange="renderKanban()"
+            class="border border-slate-300 rounded-md px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-400 outline-none">
+            <option value="desc">Data: mais novos primeiro</option>
+            <option value="asc">Data: mais antigos primeiro</option>
+          </select>
           <button onclick="carregarKanban()" class="border border-slate-300 text-slate-600 px-3 py-1.5 rounded-md text-sm hover:bg-slate-100 transition">
             <i class="fa-solid fa-rotate-right"></i>
           </button>
           <span id="kanban-total" class="text-sm text-slate-500"></span>
+        </div>
+
+        <!-- Barra de ação em massa (aparece quando há cards selecionados) -->
+        <div id="kanban-bulk-bar" class="hidden mb-4 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5 flex flex-wrap items-center gap-3">
+          <span class="text-sm font-semibold text-indigo-700"><span id="kanban-bulk-count">0</span> selecionado(s)</span>
+          <select id="kanban-bulk-etapa-sel" class="border border-indigo-300 rounded-md px-3 py-1.5 text-sm bg-white focus:ring-2 focus:ring-indigo-400 outline-none"></select>
+          <button onclick="moverSelecionados()" class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition">
+            <i class="fa-solid fa-arrow-right-arrow-left mr-1"></i> Mover selecionados
+          </button>
+          <button onclick="limparSelecao()" class="text-slate-500 text-sm hover:text-slate-700 transition">
+            Cancelar seleção
+          </button>
         </div>
 
         <!-- Board com scroll horizontal -->
@@ -2964,18 +2981,32 @@
             });
         }
 
+        let _selectedLeads = new Set();
+
         function renderKanban() {
             if (!_kanbanData) return;
             const filtroVendedor  = document.getElementById('kanban-filter-vendedor').value;
             const filtroInteresse = document.getElementById('kanban-filter-interesse').value;
+            const ordemData       = document.getElementById('kanban-sort-data')?.value || 'desc';
             const board = document.getElementById('kanban-board');
             board.innerHTML = '';
             let totalGeral = 0;
+
+            // Popula o select de destino da barra de ação em massa
+            const bulkSel = document.getElementById('kanban-bulk-etapa-sel');
+            if (bulkSel) {
+                bulkSel.innerHTML = _kanbanData.etapas.map(e => `<option value="${e.replace(/"/g,'&quot;')}">${e}</option>`).join('');
+            }
 
             _kanbanData.etapas.forEach(etapa => {
                 let leads = _kanbanData.board[etapa] || [];
                 if (filtroVendedor)  leads = leads.filter(l => l.vendedor === filtroVendedor);
                 if (filtroInteresse) leads = leads.filter(l => l.status_interesse === filtroInteresse);
+                leads = [...leads].sort((a, b) => {
+                    const da = a.created_at_raw ? new Date(a.created_at_raw).getTime() : 0;
+                    const db_ = b.created_at_raw ? new Date(b.created_at_raw).getTime() : 0;
+                    return ordemData === 'asc' ? da - db_ : db_ - da;
+                });
                 totalGeral += leads.length;
 
                 const cor = ETAPA_CORES[etapa] || ETAPA_CORES["Novo Lead"];
@@ -3006,6 +3037,49 @@
 
             document.getElementById('kanban-total').textContent =
                 `${totalGeral} lead${totalGeral !== 1 ? 's' : ''} visível${totalGeral !== 1 ? 'is' : ''}`;
+
+            _updateBulkBar();
+        }
+
+        // ── Seleção múltipla + mover em massa ──────────────────
+        function _updateBulkBar() {
+            const bar = document.getElementById('kanban-bulk-bar');
+            const count = document.getElementById('kanban-bulk-count');
+            if (!bar) return;
+            if (_selectedLeads.size > 0) {
+                bar.classList.remove('hidden');
+                count.textContent = _selectedLeads.size;
+            } else {
+                bar.classList.add('hidden');
+            }
+        }
+
+        function _toggleLeadSelect(leadId, checked) {
+            if (checked) _selectedLeads.add(leadId);
+            else _selectedLeads.delete(leadId);
+            _updateBulkBar();
+        }
+
+        function limparSelecao() {
+            _selectedLeads.clear();
+            renderKanban();
+        }
+
+        async function moverSelecionados() {
+            const etapa = document.getElementById('kanban-bulk-etapa-sel').value;
+            if (!etapa || _selectedLeads.size === 0) return;
+            try {
+                await fetch(`${API_BASE}/leads/bulk-etapa`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lead_ids: [..._selectedLeads], etapa }),
+                });
+                _selectedLeads.clear();
+                await carregarKanban();
+            } catch (e) {
+                console.error('[bulk-move]', e);
+                alert('Erro ao mover os leads selecionados.');
+            }
         }
 
         function _eid(etapa) {
@@ -3068,10 +3142,13 @@
                 ? `<div class="text-xs text-indigo-400 font-medium"><i class="fa-regular fa-comment-dots mr-1"></i>${lead.obs_count}</div>`
                 : '';
             const formSnippet = _formDataSnippet(lead.form_data);
-            return `<div class="bg-white rounded-lg p-3 shadow-sm border border-slate-100 cursor-grab active:cursor-grabbing hover:shadow-md transition"
+            const checked = _selectedLeads.has(lead.id) ? 'checked' : '';
+            return `<div class="relative bg-white rounded-lg p-3 pl-8 shadow-sm border ${checked ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-slate-100'} cursor-grab active:cursor-grabbing hover:shadow-md transition"
                         draggable="true"
                         ondragstart="event.dataTransfer.setData('leadId','${lead.id}');event.dataTransfer.setData('fromEtapa',\`${lead.etapa}\`)"
                         onclick="abrirModal(${JSON.stringify(lead).replace(/"/g,'&quot;')})">
+                <input type="checkbox" ${checked} onclick="event.stopPropagation(); _toggleLeadSelect(${lead.id}, this.checked)"
+                       class="absolute top-3 left-2.5 w-3.5 h-3.5 cursor-pointer accent-indigo-600">
                 <div class="font-semibold text-sm text-slate-800 truncate mb-0.5">${_escHtml(nome)}</div>
                 <div class="text-xs text-slate-400 mb-1"><i class="fa-solid fa-phone mr-1"></i>${lead.phone}</div>
                 ${lead.created_at ? `<div class="text-xs text-slate-400 mb-1"><i class="fa-regular fa-calendar mr-1"></i>${lead.created_at}</div>` : ''}

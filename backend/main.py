@@ -976,6 +976,7 @@ def get_leads_kanban(board_id: int = 1, db: Session = Depends(get_db)):
             "sent_at": lead.sent_at.strftime("%d/%m %H:%M") if lead.sent_at else "",
             "obs_count": obs_counts.get(lead.id, 0),
             "created_at": created_str,
+            "created_at_raw": lead.created_at.isoformat() if lead.created_at else None,
             "origem_lead": lead.origem_lead or "",
             "campaign_name": lead.campaign_name or "",
             "custo_campanha": lead.custo_campanha,
@@ -996,6 +997,24 @@ def update_lead_etapa(lead_id: int, body: dict, db: Session = Depends(get_db)):
         lead.custo_campanha = float(body["custo_campanha"]) if body["custo_campanha"] not in (None, "", 0, "0") else None
     db.commit()
     return {"ok": True}
+
+
+@app.patch("/leads/bulk-etapa")
+def bulk_update_etapa(body: dict, db: Session = Depends(get_db)):
+    """Move vários leads de uma vez para outra etapa. Body: {"lead_ids": [1,2,3], "etapa": "..."}"""
+    lead_ids = body.get("lead_ids") or []
+    etapa = (body.get("etapa") or "").strip()
+    if not lead_ids:
+        raise HTTPException(status_code=400, detail="lead_ids é obrigatório")
+    if not etapa:
+        raise HTTPException(status_code=400, detail="etapa é obrigatória")
+    atualizados = (
+        db.query(models.Lead)
+        .filter(models.Lead.id.in_(lead_ids))
+        .update({"etapa": etapa}, synchronize_session=False)
+    )
+    db.commit()
+    return {"ok": True, "atualizados": atualizados}
 
 
 # =========================
