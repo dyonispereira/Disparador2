@@ -105,10 +105,11 @@ class KanbanBoard(Base):
     """Quadros do Funil CRM — cada um tem suas próprias etapas."""
     __tablename__ = "kanban_boards"
 
-    id         = Column(Integer, primary_key=True)
-    nome       = Column(String, nullable=False)
-    etapas     = Column(String, nullable=False)   # JSON array de strings
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id                = Column(Integer, primary_key=True)
+    nome              = Column(String, nullable=False)
+    etapas            = Column(String, nullable=False)   # JSON array de strings
+    ticket_medio_json = Column(Text, nullable=True)      # JSON {etapa: valor}
+    created_at        = Column(DateTime, default=datetime.utcnow)
 
 
 class Participante(Base):

@@ -43,6 +43,7 @@ def _run_migrations():
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS bot_ativo BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS modo VARCHAR NOT NULL DEFAULT 'auto'",
             "ALTER TABLE leads ADD COLUMN IF NOT EXISTS instancia VARCHAR",
+            "ALTER TABLE kanban_boards ADD COLUMN IF NOT EXISTS ticket_medio_json TEXT",
             """CREATE TABLE IF NOT EXISTS whatsapp_instances (
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR NOT NULL,
@@ -211,11 +212,15 @@ def _facebook_sync_incremental(db, s: dict) -> int:
 
         for page in pages:
             page_tok = page["access_token"]
-            forms = requests.get(
+            forms_resp = requests.get(
                 f"https://graph.facebook.com/v25.0/{page['id']}/leadgen_forms",
                 params=_fb_params(page_tok, app_secret, {"fields": "id,name"}),
                 timeout=15,
-            ).json().get("data", [])
+            ).json()
+            if "error" in forms_resp:
+                erros.append(f"Página {page.get('name', page['id'])}: {forms_resp['error'].get('message', '')}")
+                continue
+            forms = forms_resp.get("data", [])
 
             for form in forms:
                 form_id   = form["id"]
@@ -628,6 +633,21 @@ def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None,
         if key in por_etapa:
             por_etapa[key] = row.total
 
+    # ── Indicador de Ticket Médio por etapa ─────────────────────
+    ticket_map = _json.loads(board.ticket_medio_json) if (board and board.ticket_medio_json) else {}
+    total_board_leads = sum(por_etapa.values())
+    indicador_ticket = []
+    for e in etapas:
+        qtd = por_etapa.get(e, 0)
+        ticket_medio = ticket_map.get(e, 0) or 0
+        indicador_ticket.append({
+            "etapa": e,
+            "qtd_leads": qtd,
+            "ticket_medio": ticket_medio,
+            "valor_total": round(qtd * ticket_medio, 2),
+            "percentual": round(qtd / total_board_leads * 100, 1) if total_board_leads else 0,
+        })
+
     # ── Por status de interesse ─────────────────────────────────
     por_interesse: dict = {"quente": 0, "morno": 0, "frio": 0, "sem_classificacao": 0}
     for row in db.query(models.Lead.status_interesse, func.count(models.Lead.id).label("total")) \
@@ -739,7 +759,31 @@ def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None,
         "por_etapa": por_etapa,
         "por_interesse": por_interesse,
         "por_vendedor": por_vendedor,
+        "indicador_ticket": indicador_ticket,
     }
+
+
+@app.put("/kanban/boards/{board_id}/ticket-medio")
+def set_ticket_medio(board_id: int, body: dict, db: Session = Depends(get_db)):
+    """Atualiza o Ticket Médio de uma etapa. Body: {"etapa": "...", "valor": 123.45}"""
+    import json as _json
+    board = db.query(models.KanbanBoard).filter(models.KanbanBoard.id == board_id).first()
+    if not board:
+        raise HTTPException(status_code=404, detail="Quadro não encontrado")
+
+    etapa = (body.get("etapa") or "").strip()
+    if not etapa:
+        raise HTTPException(status_code=400, detail="Campo 'etapa' é obrigatório")
+    try:
+        valor = float(body.get("valor", 0) or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Campo 'valor' inválido")
+
+    ticket_map = _json.loads(board.ticket_medio_json) if board.ticket_medio_json else {}
+    ticket_map[etapa] = valor
+    board.ticket_medio_json = _json.dumps(ticket_map, ensure_ascii=False)
+    db.commit()
+    return {"ok": True, "etapa": etapa, "valor": valor}
 
 
 # =========================

@@ -957,6 +957,37 @@
           <div class="relative h-72"><canvas id="chart-etapas"></canvas></div>
         </div>
 
+        <!-- Indicador de Ticket Médio por Card -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <h3 class="text-sm font-semibold text-slate-600 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-sack-dollar text-emerald-500"></i> Ticket Médio por Card
+          </h3>
+          <p class="text-xs text-slate-400 mb-4">Informe o ticket médio de cada etapa para ver o valor potencial em cada card do funil.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-xs font-semibold text-slate-500 border-b border-slate-100">
+                  <th class="text-left py-2 pr-4">Nome CARD</th>
+                  <th class="text-right py-2 px-3">Qtd Lead</th>
+                  <th class="text-right py-2 px-3">Ticket Médio</th>
+                  <th class="text-right py-2 px-3">Valor Total</th>
+                  <th class="text-right py-2 pl-3">%</th>
+                </tr>
+              </thead>
+              <tbody id="dash-ticket-medio"></tbody>
+              <tfoot>
+                <tr class="border-t-2 border-slate-200 font-bold text-slate-700">
+                  <td class="py-2 pr-4">Total</td>
+                  <td class="text-right py-2 px-3" id="dash-ticket-total-qtd"></td>
+                  <td class="text-right py-2 px-3"></td>
+                  <td class="text-right py-2 px-3" id="dash-ticket-total-valor"></td>
+                  <td class="text-right py-2 pl-3" id="dash-ticket-total-pct"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
         <!-- Reuniões + Resposta cards -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="dash-reunioes"></div>
 
@@ -2578,6 +2609,7 @@
                 _renderDashReunioesCards(data.reunioes, data.resumo);
                 _renderDashCharts(data);
                 _renderDashVendedores(data.por_vendedor);
+                _renderDashTicketMedio(data.indicador_ticket);
             } catch(e) { console.error('[dash]', e); }
         }
 
@@ -2737,6 +2769,52 @@
                   </div>
                 </td>
               </tr>`).join('');
+        }
+
+        // ── Ticket Médio por Card ──────────────────────────────
+        function _fmtBRL(v) {
+            return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        function _renderDashTicketMedio(list) {
+            const tbody = document.getElementById('dash-ticket-medio');
+            if (!list) { tbody.innerHTML = ''; return; }
+
+            tbody.innerHTML = list.map((row, i) => `
+              <tr class="border-b border-slate-50 hover:bg-slate-50 transition">
+                <td class="py-2 pr-4 text-slate-700">${row.etapa}</td>
+                <td class="text-right py-2 px-3 text-slate-600">${row.qtd_leads}</td>
+                <td class="text-right py-2 px-3">
+                  <input type="number" step="0.01" min="0"
+                    class="w-28 text-right border border-slate-200 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-400 outline-none"
+                    value="${row.ticket_medio || ''}" placeholder="R$ 0,00"
+                    data-etapa="${row.etapa.replace(/"/g, '&quot;')}" id="ticket-medio-input-${i}"
+                    onchange="_salvarTicketMedio(this)">
+                </td>
+                <td class="text-right py-2 px-3 font-semibold text-emerald-600" id="ticket-medio-total-${i}">${_fmtBRL(row.valor_total)}</td>
+                <td class="text-right py-2 pl-3 font-semibold text-indigo-600">${row.percentual}%</td>
+              </tr>`).join('');
+
+            const totalQtd   = list.reduce((s, r) => s + r.qtd_leads, 0);
+            const totalValor = list.reduce((s, r) => s + r.valor_total, 0);
+            document.getElementById('dash-ticket-total-qtd').textContent   = totalQtd;
+            document.getElementById('dash-ticket-total-valor').textContent = _fmtBRL(totalValor);
+            document.getElementById('dash-ticket-total-pct').textContent   = totalQtd ? '100%' : '0%';
+        }
+
+        async function _salvarTicketMedio(input) {
+            const etapa = input.dataset.etapa;
+            const valor = parseFloat(input.value) || 0;
+            try {
+                await fetch(`${API_BASE}/kanban/boards/${_dashBoardId}/ticket-medio`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ etapa, valor }),
+                });
+                carregarDashboard();
+            } catch (e) {
+                console.error('[ticket-medio]', e);
+            }
         }
 
         // ──────────────────────────────────────────
