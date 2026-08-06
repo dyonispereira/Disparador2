@@ -1,7 +1,17 @@
 import json
 import os
 
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+# Fica em ./data para poder ser montado como volume Docker e sobreviver
+# à recriação do container (sem isso, o token do Facebook e outras
+# configurações somem a cada deploy).
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+os.makedirs(_DATA_DIR, exist_ok=True)
+SETTINGS_FILE = os.path.join(_DATA_DIR, "settings.json")
+
+_LEGACY_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+if os.path.exists(_LEGACY_SETTINGS_FILE) and not os.path.exists(SETTINGS_FILE):
+    import shutil
+    shutil.move(_LEGACY_SETTINGS_FILE, SETTINGS_FILE)
 
 DEFAULT_SETTINGS = {
     "evolution_url": os.getenv("EVOLUTION_API_URL", "http://127.0.0.1:8080"),

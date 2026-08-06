@@ -61,6 +61,8 @@ services:
       - WEBHOOK_BASE_URL=https://crmprodisparo.duckdns.org
       # URL interna Docker para Evolution API mandar webhooks ao backend
       - EVOLUTION_WEBHOOK_URL=http://backend:8000
+    volumes:
+      - backend_data:/app/data
     depends_on:
       - postgres
       - evolution
@@ -83,3 +85,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_data:
