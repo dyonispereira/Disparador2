@@ -2765,7 +2765,10 @@ async def webhook_evolution(request: Request):
 
             # Alerta comercial para o grupo
             vendor_jid = settings.get("vendor_group_jid", "")
-            if vendor_jid:
+            alert_instance = instance_name or settings.get("instance", "")
+            if not vendor_jid:
+                print("[alerta-comercial] pulado: vendor_group_jid não configurado")
+            else:
                 phone_display = phone[2:] if phone.startswith("55") else phone
                 from datetime import timezone as _tz, timedelta as _td
                 CBA_TZ = _tz(_td(hours=-4))  # Cuiabá/MT UTC-4
@@ -2780,18 +2783,18 @@ async def webhook_evolution(request: Request):
                     f"\U0001f4ac Mensagem: \"{msg_preview}\"\n\n"
                     f"⚡ *URGENTE:* entrar em contato o quanto antes!"
                 )
+                print(f"[alerta-comercial] enviando pra {vendor_jid} via instância '{alert_instance}'")
                 try:
                     headers = {"apikey": settings["api_key"], "Content-Type": "application/json"}
                     alert_resp = requests.post(
-                        f"{settings['evolution_url']}/message/sendText/{instance_name or settings['instance']}",
+                        f"{settings['evolution_url']}/message/sendText/{alert_instance}",
                         json={"number": vendor_jid, "text": alert},
                         headers=headers,
                         timeout=10,
                     )
-                    if not alert_resp.ok:
-                        print(f"[fb-alert] falha ao enviar pro grupo: {alert_resp.status_code} {alert_resp.text[:300]}")
+                    print(f"[alerta-comercial] resposta: {alert_resp.status_code} {alert_resp.text[:300]}")
                 except Exception as _alert_exc:
-                    print(f"[fb-alert] erro ao enviar pro grupo: {_alert_exc}")
+                    print(f"[alerta-comercial] erro ao enviar: {_alert_exc}")
 
             # Salva a mensagem recebida no histórico de chat
             msg_content = text.strip() if text.strip() else ("[áudio]" if audio_data else "")
