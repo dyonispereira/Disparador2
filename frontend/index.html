@@ -995,6 +995,21 @@
           <div class="relative h-72"><canvas id="chart-mensal"></canvas></div>
         </div>
 
+        <!-- Chart: Entrada de Leads x Clientes (semanal) -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h3 class="text-sm font-semibold text-slate-600 flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-indigo-400"></i> Entrada de Leads x Clientes (semanal)
+            </h3>
+            <div class="flex items-center gap-4 text-xs">
+              <span class="flex items-center gap-1.5 text-slate-500"><span class="w-2.5 h-2.5 rounded-sm bg-indigo-400 inline-block"></span> Leads entrada</span>
+              <span class="flex items-center gap-1.5 text-slate-500"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span> Viraram cliente</span>
+              <span id="dash-semanal-taxa-media" class="font-semibold text-indigo-600"></span>
+            </div>
+          </div>
+          <div class="relative h-72"><canvas id="chart-semanal"></canvas></div>
+        </div>
+
         <!-- Chart: Leads por Etapa -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
           <h3 class="text-sm font-semibold text-slate-600 mb-4 flex items-center gap-2">
@@ -2828,6 +2843,47 @@
                     : 0;
                 const elTaxa = document.getElementById('dash-mensal-taxa-media');
                 if (elTaxa) elTaxa.textContent = `Média: ${taxaMedia}%`;
+            }
+
+            // Chart: Entrada de Leads x Clientes (semanal)
+            const ctxSemanal = document.getElementById('chart-semanal')?.getContext('2d');
+            if (ctxSemanal && data.semanal?.length) {
+                _dashCharts.semanal = new Chart(ctxSemanal, {
+                    data: {
+                        labels: data.semanal.map(s => s.semana_label),
+                        datasets: [
+                            { type: 'bar', label: 'Leads entrada', data: data.semanal.map(s => s.leads_entrada),
+                                backgroundColor: '#818cf8', borderRadius: 4, order: 2 },
+                            { type: 'bar', label: 'Viraram cliente', data: data.semanal.map(s => s.leads_clientes),
+                                backgroundColor: '#10b981', borderRadius: 4, order: 2 },
+                            { type: 'line', label: 'Taxa de conversão', data: data.semanal.map(s => s.taxa_conversao),
+                                borderColor: '#f59e0b', backgroundColor: '#f59e0b', yAxisID: 'y1',
+                                tension: 0.3, order: 1 },
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: {
+                                title: items => `Semana de ${items[0].label} (${data.semanal[items[0].dataIndex].mes_label})`,
+                            } },
+                        },
+                        scales: {
+                            y:  { beginAtZero: true, ticks: { stepSize: 1 }, title: { display: true, text: 'Leads' } },
+                            y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false },
+                                  title: { display: true, text: '% conversão' },
+                                  ticks: { callback: v => v + '%' } },
+                            x:  { grid: { display: false } },
+                        }
+                    }
+                });
+                const validasSem = data.semanal.filter(s => s.leads_entrada > 0);
+                const taxaMediaSem = validasSem.length
+                    ? Math.round(validasSem.reduce((s, m) => s + m.taxa_conversao, 0) / validasSem.length * 10) / 10
+                    : 0;
+                const elTaxaSem = document.getElementById('dash-semanal-taxa-media');
+                if (elTaxaSem) elTaxaSem.textContent = `Média: ${taxaMediaSem}%`;
             }
 
             // Chart: Leads por Etapa (horizontal bar)

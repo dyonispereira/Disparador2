@@ -749,6 +749,31 @@ def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None,
             "taxa_conversao": round(leads_clientes / leads_entrada * 100, 1) if leads_entrada else 0,
         })
 
+    # ── Indicador semanal: entrada de leads x viraram cliente ────
+    # Últimas 12 semanas (segunda a domingo), mesma lógica do mensal.
+    def _monday(dt):
+        d = dt - timedelta(days=dt.weekday())
+        return datetime(d.year, d.month, d.day)
+
+    semana_atual = _monday(datetime.utcnow())
+    semanal = []
+    for i in range(11, -1, -1):
+        s_ini = semana_atual - timedelta(weeks=i)
+        s_fim = s_ini + timedelta(weeks=1)
+        sem_q = db.query(models.Lead).filter(
+            models.Lead.created_at >= s_ini, models.Lead.created_at < s_fim, filtro_board
+        )
+        leads_entrada  = sem_q.count()
+        leads_clientes = sem_q.filter(models.Lead.etapa.in_(ETAPAS_FECHADO)).count()
+        semanal.append({
+            "semana": s_ini.strftime("%Y-%m-%d"),
+            "semana_label": s_ini.strftime("%d/%m"),
+            "mes_label": _MESES_PT[s_ini.month - 1],
+            "leads_entrada": leads_entrada,
+            "leads_clientes": leads_clientes,
+            "taxa_conversao": round(leads_clientes / leads_entrada * 100, 1) if leads_entrada else 0,
+        })
+
     def _pct(n): return round(n / total * 100, 1) if total else 0
 
     funil = [
@@ -791,6 +816,7 @@ def get_dashboard_stats(board_id: int = 1, mes: int = None, ano: int = None,
         "por_vendedor": por_vendedor,
         "indicador_ticket": indicador_ticket,
         "mensal": mensal,
+        "semanal": semanal,
     }
 
 
