@@ -63,6 +63,8 @@ services:
       - EVOLUTION_WEBHOOK_URL=http://backend:8000
     volumes:
       - backend_data:/app/data
+      - ./backend/credentials.json:/app/credentials.json
+      - ./backend/token.json:/app/token.json
     depends_on:
       - postgres
       - evolution
