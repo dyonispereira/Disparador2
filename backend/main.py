@@ -786,6 +786,25 @@ def set_ticket_medio(board_id: int, body: dict, db: Session = Depends(get_db)):
     return {"ok": True, "etapa": etapa, "valor": valor}
 
 
+@app.put("/kanban/boards/{board_id}/ticket-medio/aplicar-todos")
+def aplicar_ticket_medio_todos(board_id: int, body: dict, db: Session = Depends(get_db)):
+    """Aplica o mesmo Ticket Médio a todas as etapas do quadro. Body: {"valor": 123.45}"""
+    import json as _json
+    board = db.query(models.KanbanBoard).filter(models.KanbanBoard.id == board_id).first()
+    if not board:
+        raise HTTPException(status_code=404, detail="Quadro não encontrado")
+    try:
+        valor = float(body.get("valor", 0) or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Campo 'valor' inválido")
+
+    etapas = _json.loads(board.etapas)
+    ticket_map = {e: valor for e in etapas}
+    board.ticket_medio_json = _json.dumps(ticket_map, ensure_ascii=False)
+    db.commit()
+    return {"ok": True, "valor": valor, "etapas_atualizadas": len(etapas)}
+
+
 # =========================
 # ROOT
 # =========================
